@@ -8,7 +8,7 @@ TUIkit uses a layered event dispatch system. When a key is pressed, it passes th
 
 @Image(source: "keyboard-event-dispatch.png", alt: "Flowchart showing keyboard event dispatch through five layers: a hasTextInputFocus check gates Layer 0 (Text Input via focusManager.dispatchKeyEvent for TextField/SecureField). Layer 1: Status Bar Items (shortcut-triggered actions). Layer 2: View Handlers (.onKeyPress modifiers, deepest view first). A second hasTextInputFocus check skips Layer 3 if text input was focused. Layer 3: Focus System (focused element delegation, Tab/Shift+Tab, arrow key fallback). Layer 4: Default Bindings (quit, theme, appearance). Unmatched events are dropped.")
 
-Additionally, `Ctrl+C` (SIGINT) is handled at the OS signal level **before** any of these layers: it always terminates the application.
+Additionally, `Ctrl+C` is handled as a global interrupt **before** text fields, status-bar items, view handlers, or focus handlers. In raw mode it arrives as a key event rather than OS-level SIGINT, and TUIkit routes it through the normal cleanup path.
 
 ## Available Keys
 

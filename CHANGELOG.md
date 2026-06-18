@@ -30,7 +30,7 @@ TUIkit is currently pre-1.0. Breaking changes may occur before a stable release,
 
 ### Fixed
 
-- Nothing yet.
+- Fixed raw-mode Ctrl+C handling so it exits through the normal app cleanup path before focused controls or custom handlers can consume it.
 
 ### Migration Notes
 
