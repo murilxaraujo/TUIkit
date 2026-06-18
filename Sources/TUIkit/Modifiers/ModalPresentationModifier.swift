@@ -23,7 +23,7 @@
 ///     }
 /// }
 /// ```
-public struct ModalPresentationModifier<Content: View, Modal: View>: View {
+struct ModalPresentationModifier<Content: View, Modal: View>: View {
     /// The base content to render.
     let content: Content
 
@@ -33,7 +33,7 @@ public struct ModalPresentationModifier<Content: View, Modal: View>: View {
     /// The modal content to present.
     let modal: Modal
 
-    public var body: Never {
+    var body: Never {
         fatalError("ModalPresentationModifier renders via Renderable")
     }
 }
@@ -44,7 +44,7 @@ extension ModalPresentationModifier: Renderable {
     /// A stable section ID for modal focus sections.
     private static var modalSectionID: String { "__modal__" }
 
-    public func renderToBuffer(context: RenderContext) -> FrameBuffer {
+    func renderToBuffer(context: RenderContext) -> FrameBuffer {
         // If not presented, just return base content
         guard isPresented.wrappedValue else {
             return TUIkit.renderToBuffer(content, context: context)

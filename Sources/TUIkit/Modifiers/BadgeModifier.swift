@@ -14,14 +14,14 @@
 /// child views. Badges automatically hide when:
 /// - The count is 0 (for integer badges)
 /// - The label is nil (for optional Text/String badges)
-public struct BadgeModifier<Content: View>: View {
+struct BadgeModifier<Content: View>: View {
     /// The content to apply the badge to.
     let content: Content
 
     /// The badge value (Int, Text, or String).
     let value: BadgeValue
 
-    public var body: Never {
+    var body: Never {
         fatalError("BadgeModifier renders via Renderable")
     }
 }
@@ -60,7 +60,7 @@ public enum BadgeValue: Sendable {
 // MARK: - Equatable
 
 extension BadgeModifier: @preconcurrency Equatable where Content: Equatable {
-    public static func == (lhs: BadgeModifier<Content>, rhs: BadgeModifier<Content>) -> Bool {
+    static func == (lhs: BadgeModifier<Content>, rhs: BadgeModifier<Content>) -> Bool {
         lhs.content == rhs.content && lhs.value == rhs.value
     }
 }
@@ -84,7 +84,7 @@ extension BadgeValue: Equatable {
 ///
 /// This is used by List to extract badge values during row extraction.
 @MainActor
-public func extractBadgeValue<V: View>(from view: V) -> BadgeValue? {
+func extractBadgeValue<V: View>(from view: V) -> BadgeValue? {
     // Use Mirror to check if the view is a BadgeModifier
     let mirror = Mirror(reflecting: view)
     for child in mirror.children {
@@ -98,7 +98,7 @@ public func extractBadgeValue<V: View>(from view: V) -> BadgeValue? {
 // MARK: - Renderable
 
 extension BadgeModifier: Renderable {
-    public func renderToBuffer(context: RenderContext) -> FrameBuffer {
+    func renderToBuffer(context: RenderContext) -> FrameBuffer {
         // Create modified environment with badge value.
         let modifiedEnvironment = context.environment.setting(\EnvironmentValues.badgeValue, to: value)
         let modifiedContext = context.withEnvironment(modifiedEnvironment)

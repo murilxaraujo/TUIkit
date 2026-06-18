@@ -9,7 +9,7 @@
 /// The overlay is rendered on top of the base content. Both views are rendered
 /// to their natural size, and the overlay is positioned according to the
 /// specified alignment within the base content's bounds.
-public struct OverlayModifier<Base: View, Overlay: View>: View {
+struct OverlayModifier<Base: View, Overlay: View>: View {
     /// The base content.
     let base: Base
 
@@ -19,7 +19,7 @@ public struct OverlayModifier<Base: View, Overlay: View>: View {
     /// The alignment of the overlay within the base bounds.
     let alignment: Alignment
 
-    public var body: Never {
+    var body: Never {
         fatalError("OverlayModifier renders via Renderable")
     }
 }
@@ -27,7 +27,7 @@ public struct OverlayModifier<Base: View, Overlay: View>: View {
 // MARK: - Equatable Conformance
 
 extension OverlayModifier: @preconcurrency Equatable where Base: Equatable, Overlay: Equatable {
-    public static func == (lhs: OverlayModifier<Base, Overlay>, rhs: OverlayModifier<Base, Overlay>) -> Bool {
+    static func == (lhs: OverlayModifier<Base, Overlay>, rhs: OverlayModifier<Base, Overlay>) -> Bool {
         lhs.base == rhs.base &&
         lhs.overlay == rhs.overlay &&
         lhs.alignment == rhs.alignment
@@ -37,7 +37,7 @@ extension OverlayModifier: @preconcurrency Equatable where Base: Equatable, Over
 // MARK: - Renderable
 
 extension OverlayModifier: Renderable {
-    public func renderToBuffer(context: RenderContext) -> FrameBuffer {
+    func renderToBuffer(context: RenderContext) -> FrameBuffer {
         // Render both contents
         let baseBuffer = TUIkit.renderToBuffer(base, context: context)
         let overlayBuffer = TUIkit.renderToBuffer(overlay, context: context)
