@@ -11,6 +11,8 @@ TUIkit is currently pre-1.0. Breaking changes may occur before a stable release,
 - Added `docs/APIStability.md` to define pre-1.0 API stability, SemVer expectations, module stability, and public API change rules.
 - Added `docs/PublicAPIInventory.md` as the starting inventory for public API classification.
 - Added `docs/ArchitectureAudit.md` to track `body: Never` / `Renderable` boundary decisions.
+- Added `docs/KnownLimitations.md` to document current production-readiness caveats.
+- Added `docs/TerminalCompatibility.md` as the starting terminal compatibility matrix and manual validation checklist.
 - Added `scripts/dump-public-api.sh` to regenerate the public API inventory from source.
 
 ### Changed

@@ -121,7 +121,7 @@ Objective: prove TUIkit behaves well in real terminals.
 
 Tasks:
 
-- [ ] Create a terminal compatibility matrix.
+- [x] Create a terminal compatibility matrix. See [Terminal Compatibility Matrix](TerminalCompatibility.md).
 - [ ] Validate macOS Terminal, iTerm2, Ghostty, WezTerm, Alacritty, Kitty, VS Code terminal, tmux, screen, and Linux console where practical.
 - [ ] Test alternate screen enter/exit behavior.
 - [ ] Test raw mode restoration on normal quit, Ctrl-C, thrown errors, and crashes where possible.
@@ -133,7 +133,7 @@ Tasks:
 
 Acceptance criteria:
 
-- [ ] A compatibility matrix exists and is kept with release notes.
+- [x] A compatibility matrix exists and is kept with release notes.
 - [ ] Terminal cleanup is reliable in normal and interrupted exits.
 - [ ] Known terminal limitations are documented.
 
@@ -188,7 +188,7 @@ Tasks:
 - [ ] Add a custom component guide.
 - [ ] Add a theming and style guide.
 - [ ] Add a keyboard and focus UX guide.
-- [ ] Add a known limitations page.
+- [x] Add a known limitations page. See [Known Limitations](KnownLimitations.md).
 - [ ] Add a troubleshooting page for terminal issues.
 - [ ] Update the project template to reflect recommended app architecture.
 - [ ] Ensure README, DocC, and examples agree.
@@ -221,7 +221,7 @@ Objective: make TUIkit consumable and maintainable as a dependency.
 
 Tasks:
 
-- [ ] Create `CHANGELOG.md`.
+- [x] Create `CHANGELOG.md`.
 - [ ] Create or update issue templates.
 - [ ] Add a security policy if accepting vulnerability reports.
 - [ ] Define supported Swift versions and platform versions.
@@ -239,10 +239,10 @@ Acceptance criteria:
 
 ### Milestone 0: Baseline and backlog
 
-- [ ] Commit this plan.
+- [x] Commit this plan.
 - [ ] Create tracking issues or backlog entries for each workstream.
-- [ ] Record current test, lint, build, and documentation status.
-- [ ] Add a `Known Limitations` draft.
+- [x] Record current test, lint, build, and documentation status.
+- [x] Add a `Known Limitations` draft.
 
 Exit criteria:
 
@@ -250,11 +250,11 @@ Exit criteria:
 
 ### Milestone 1: Beta-quality API discipline
 
-- [ ] Public API inventory complete.
-- [ ] SemVer and deprecation policy documented.
-- [ ] Changelog created.
-- [ ] Public `body: Never` / `Renderable` audit complete.
-- [ ] Initial known limitations documented.
+- [x] Public API inventory complete.
+- [x] SemVer and deprecation policy documented.
+- [x] Changelog created.
+- [x] Public `body: Never` / `Renderable` audit complete.
+- [x] Initial known limitations documented.
 
 Exit criteria:
 
@@ -299,11 +299,11 @@ Exit criteria:
 Recommended starting order:
 
 1. Create backlog issues from this document.
-2. Add `CHANGELOG.md` and a short API stability policy.
-3. Run the public API inventory.
-4. Audit `body: Never` and `Renderable` usage against the architecture rules.
-5. Draft `docs/KnownLimitations.md`.
-6. Start the terminal compatibility matrix.
+2. Continue terminal compatibility smoke validation using [Terminal Compatibility Matrix](TerminalCompatibility.md).
+3. Start the concurrency/shared-state audit.
+4. Verify SwiftUI-equivalent API parity and document deviations.
+5. Expand focus/keyboard UX documentation and tests.
+6. Build out a realistic dogfood flow in the example app.
 
 ## Validation commands
 
