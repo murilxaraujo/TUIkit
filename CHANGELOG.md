@@ -16,7 +16,7 @@ TUIkit is currently pre-1.0. Breaking changes may occur before a stable release,
 ### Changed
 
 - Linked production-readiness and API-stability documentation from the README and contribution guidance.
-- Made `BadgeModifier`, `OverlayModifier`, `ModalPresentationModifier`, `ListRowSeparatorModifier`, and `extractBadgeValue(from:)` internal implementation details; app-facing modifier methods remain public.
+- Made `BadgeModifier`, `OverlayModifier`, `ModalPresentationModifier`, `ListRowSeparatorModifier`, `KeyPressModifier`, `AlertPresentationModifier`, `DimmedModifier`, `SelectionDisabledModifier`, `FlexibleFrameView`, and `extractBadgeValue(from:)` internal implementation details; app-facing modifier methods remain public.
 
 ### Deprecated
 

@@ -21,93 +21,48 @@ private func testContext(width: Int = 40, height: Int = 24) -> RenderContext {
 @Suite("FrameModifier Tests")
 struct FrameModifierTests {
 
-    @Test("FlexibleFrameView with maxWidth infinity fills available width")
+    @Test(".frame(maxWidth: .infinity) fills available width")
     func frameMaxWidthInfinity() {
-        let frame = FlexibleFrameView(
-            content: Text("Hi"),
-            minWidth: nil,
-            idealWidth: nil,
-            maxWidth: .infinity,
-            minHeight: nil,
-            idealHeight: nil,
-            maxHeight: nil,
-            alignment: .center
-        )
+        let frame = Text("Hi").frame(maxWidth: .infinity)
         let context = testContext(width: 30)
-        let buffer = frame.renderToBuffer(context: context)
+        let buffer = renderToBuffer(frame, context: context)
 
         #expect(buffer.width == 30)
     }
 
-    @Test("FlexibleFrameView with fixed maxWidth constrains")
+    @Test(".frame(maxWidth: .fixed) constrains")
     func frameFixedMaxWidth() {
-        let frame = FlexibleFrameView(
-            content: Text("Short"),
-            minWidth: nil,
-            idealWidth: nil,
-            maxWidth: .fixed(10),
-            minHeight: nil,
-            idealHeight: nil,
-            maxHeight: nil,
-            alignment: .leading
-        )
+        let frame = Text("Short").frame(maxWidth: .fixed(10), alignment: .leading)
         let context = testContext(width: 40)
-        let buffer = frame.renderToBuffer(context: context)
+        let buffer = renderToBuffer(frame, context: context)
 
         // Content "Short" is 5 chars, no maxWidth expansion without infinity
         #expect(buffer.width <= 10)
     }
 
-    @Test("FlexibleFrameView with minWidth enforces minimum")
+    @Test(".frame(minWidth:) enforces minimum")
     func frameMinWidth() {
-        let frame = FlexibleFrameView(
-            content: Text("Hi"),
-            minWidth: 10,
-            idealWidth: nil,
-            maxWidth: nil,
-            minHeight: nil,
-            idealHeight: nil,
-            maxHeight: nil,
-            alignment: .leading
-        )
+        let frame = Text("Hi").frame(minWidth: 10, alignment: .leading)
         let context = testContext(width: 40)
-        let buffer = frame.renderToBuffer(context: context)
+        let buffer = renderToBuffer(frame, context: context)
 
         #expect(buffer.width >= 10)
     }
 
-    @Test("FlexibleFrameView with minHeight enforces minimum")
+    @Test(".frame(minHeight:) enforces minimum")
     func frameMinHeight() {
-        let frame = FlexibleFrameView(
-            content: Text("Hi"),
-            minWidth: nil,
-            idealWidth: nil,
-            maxWidth: nil,
-            minHeight: 5,
-            idealHeight: nil,
-            maxHeight: nil,
-            alignment: .top
-        )
+        let frame = Text("Hi").frame(minHeight: 5, alignment: .top)
         let context = testContext()
-        let buffer = frame.renderToBuffer(context: context)
+        let buffer = renderToBuffer(frame, context: context)
 
         #expect(buffer.height >= 5)
     }
 
-    @Test("FlexibleFrameView alignment center")
+    @Test(".frame alignment center")
     func frameCenterAlignment() {
-        let frame = FlexibleFrameView(
-            content: Text("Hi"),
-            minWidth: 10,
-            idealWidth: nil,
-            maxWidth: nil,
-            minHeight: 3,
-            idealHeight: nil,
-            maxHeight: nil,
-            alignment: .center
-        )
+        let frame = Text("Hi").frame(minWidth: 10, minHeight: 3, alignment: .center)
         let context = testContext()
-        let buffer = frame.renderToBuffer(context: context)
+        let buffer = renderToBuffer(frame, context: context)
 
         #expect(buffer.width >= 10)
         #expect(buffer.height >= 3)
@@ -120,40 +75,22 @@ struct FrameModifierTests {
         #expect(leadingSpaces == 4, "Content should be horizontally centered with 4 leading spaces")
     }
 
-    @Test("FlexibleFrameView alignment trailing")
+    @Test(".frame alignment trailing")
     func frameTrailingAlignment() {
-        let frame = FlexibleFrameView(
-            content: Text("Hi"),
-            minWidth: 10,
-            idealWidth: nil,
-            maxWidth: nil,
-            minHeight: nil,
-            idealHeight: nil,
-            maxHeight: nil,
-            alignment: .trailing
-        )
+        let frame = Text("Hi").frame(minWidth: 10, alignment: .trailing)
         let context = testContext()
-        let buffer = frame.renderToBuffer(context: context)
+        let buffer = renderToBuffer(frame, context: context)
 
         // "Hi" should be right-aligned within 10 chars
         let line = buffer.lines[0]
         #expect(line.stripped.hasSuffix("Hi"))
     }
 
-    @Test("FlexibleFrameView alignment bottom")
+    @Test(".frame alignment bottom")
     func frameBottomAlignment() {
-        let frame = FlexibleFrameView(
-            content: Text("Hi"),
-            minWidth: nil,
-            idealWidth: nil,
-            maxWidth: nil,
-            minHeight: 3,
-            idealHeight: nil,
-            maxHeight: nil,
-            alignment: .bottom
-        )
+        let frame = Text("Hi").frame(minHeight: 3, alignment: .bottom)
         let context = testContext()
-        let buffer = frame.renderToBuffer(context: context)
+        let buffer = renderToBuffer(frame, context: context)
 
         #expect(buffer.height >= 3)
         // Content on last line
@@ -161,43 +98,25 @@ struct FrameModifierTests {
         #expect(lastLine.contains("Hi"))
     }
 
-    @Test("FlexibleFrameView maxHeight constrains available height for content")
+    @Test(".frame(maxHeight:) constrains available height for content")
     func frameMaxHeight() {
         // maxHeight constrains the availableHeight passed to child rendering,
         // but does not clip content that exceeds constraints. This matches
         // SwiftUI behavior where frame constraints inform layout, not clip.
-        let frame = FlexibleFrameView(
-            content: Text("Short"),
-            minWidth: nil,
-            idealWidth: nil,
-            maxWidth: nil,
-            minHeight: 5,
-            idealHeight: nil,
-            maxHeight: .fixed(10),
-            alignment: .top
-        )
+        let frame = Text("Short").frame(minHeight: 5, maxHeight: .fixed(10), alignment: .top)
         let context = testContext()
-        let buffer = frame.renderToBuffer(context: context)
+        let buffer = renderToBuffer(frame, context: context)
 
         // minHeight 5 expands the 1-line content to 5 lines
         #expect(buffer.height == 5)
     }
 
-    @Test("FlexibleFrameView maxHeight infinity fills available space")
+    @Test(".frame(maxHeight: .infinity) fills available space")
     func frameMaxHeightInfinity() {
-        let frame = FlexibleFrameView(
-            content: Text("Hi"),
-            minWidth: nil,
-            idealWidth: nil,
-            maxWidth: nil,
-            minHeight: nil,
-            idealHeight: nil,
-            maxHeight: .infinity,
-            alignment: .top
-        )
+        let frame = Text("Hi").frame(maxHeight: .infinity, alignment: .top)
         var context = testContext()
         context.availableHeight = 10
-        let buffer = frame.renderToBuffer(context: context)
+        let buffer = renderToBuffer(frame, context: context)
 
         // Should expand to fill available height
         #expect(buffer.height == 10)

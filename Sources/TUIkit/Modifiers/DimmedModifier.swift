@@ -13,11 +13,11 @@
 /// (box-drawing, indicators) — then re-renders each line
 /// with a dimmed foreground on `palette.overlayBackground`.
 /// The result is a flat, de-emphasized text layer with no visual ornaments.
-public struct DimmedModifier<Content: View>: View {
+struct DimmedModifier<Content: View>: View {
     /// The content to dim.
     let content: Content
 
-    public var body: Never {
+    var body: Never {
         fatalError("DimmedModifier renders via Renderable")
     }
 }
@@ -25,7 +25,7 @@ public struct DimmedModifier<Content: View>: View {
 // MARK: - Equatable Conformance
 
 extension DimmedModifier: @preconcurrency Equatable where Content: Equatable {
-    public static func == (lhs: DimmedModifier<Content>, rhs: DimmedModifier<Content>) -> Bool {
+    static func == (lhs: DimmedModifier<Content>, rhs: DimmedModifier<Content>) -> Bool {
         lhs.content == rhs.content
     }
 }
@@ -59,7 +59,7 @@ private enum DimmedOrnaments {
 // MARK: - Renderable
 
 extension DimmedModifier: Renderable {
-    public func renderToBuffer(context: RenderContext) -> FrameBuffer {
+    func renderToBuffer(context: RenderContext) -> FrameBuffer {
         let contentBuffer = TUIkit.renderToBuffer(content, context: context)
 
         guard !contentBuffer.isEmpty else {
