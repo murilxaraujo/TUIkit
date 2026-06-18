@@ -22,6 +22,44 @@ struct TUIContextTests {
         #expect(contextB.lifecycle.hasAppeared(token: "a") == false)
     }
 
+    @Test("Render caches are independent per context")
+    func renderCachesAreIndependent() {
+        let contextA = TUIContext()
+        let contextB = TUIContext()
+        let identity = ViewIdentity(rootType: TestContextView.self)
+
+        contextA.renderCache.store(
+            identity: identity,
+            view: Text("Cached"),
+            buffer: FrameBuffer(lines: ["Cached"]),
+            contextWidth: 10,
+            contextHeight: 1
+        )
+
+        #expect(contextA.renderCache.count == 1)
+        #expect(contextB.renderCache.count == 0)
+    }
+
+    @Test("State changes invalidate owning context render cache")
+    func stateChangesInvalidateOwningContextRenderCache() {
+        let context = TUIContext()
+        let identity = ViewIdentity(rootType: TestContextView.self)
+        let key = StateStorage.StateKey(identity: identity, propertyIndex: 0)
+        let box: StateBox<Int> = context.stateStorage.storage(for: key, default: 0)
+
+        context.renderCache.store(
+            identity: identity,
+            view: Text("Cached"),
+            buffer: FrameBuffer(lines: ["Cached"]),
+            contextWidth: 10,
+            contextHeight: 1
+        )
+
+        box.value = 1
+
+        #expect(context.renderCache.count == 0)
+    }
+
     @Test("reset clears all services")
     func resetClears() {
         let context = TUIContext()
@@ -58,4 +96,10 @@ struct TUIContextTests {
 /// Test preference key for TUIContext tests.
 private struct TestContextStringKey: PreferenceKey {
     static let defaultValue: String = "default"
+}
+
+private struct TestContextView: View {
+    var body: some View {
+        Text("Test")
+    }
 }

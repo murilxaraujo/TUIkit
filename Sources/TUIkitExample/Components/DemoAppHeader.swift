@@ -27,6 +27,8 @@ import TUIkit
 /// .appHeader { DemoAppHeader("Main Menu", subtitle: "A SwiftUI-like framework") }
 /// ```
 struct DemoAppHeader: View {
+    @Environment(\.renderPerformance) private var renderPerformance
+
     let title: String
     let subtitle: String?
 
@@ -61,7 +63,7 @@ struct DemoAppHeader: View {
 
 extension DemoAppHeader {
     private var systemInfo: String {
-        "\(osName) \(osVersion) · \(architecture)"
+        "\(osName) \(osVersion) · \(architecture) · \(renderPerformance.formattedFPS)"
     }
 
     private var osName: String {

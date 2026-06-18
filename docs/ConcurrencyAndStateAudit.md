@@ -23,8 +23,8 @@ The audit does **not** mean every listed item is a bug. It distinguishes accepte
 | `AppState` | Locked, `Sendable`, has `shared` fallback | Accept temporarily; prefer per-runner instance for runtime. |
 | Signal flags | `nonisolated(unsafe)` booleans | Accept with documented async-signal-safety invariant. |
 | `StateRegistration` | `nonisolated(unsafe)` render globals | Accept only under single-threaded render invariant; revisit for reentrant/concurrent rendering. |
-| `RenderCache.shared` | Unsynchronized shared cache | Risk: should move to per-`TUIContext` ownership or lock before production. |
-| `StorageDefaults.backend` | `nonisolated(unsafe)` mutable global | Risk: should lock or freeze before first use. |
+| `RenderCache.shared` | Locked compatibility fallback | Runtime fixed: `TUIContext` now owns a fresh render cache by default. Keep `shared` only for standalone compatibility until 1.0 policy is decided. |
+| `StorageDefaults.backend` | Lock-backed process default | Fixed: get/set access is synchronized; existing `@AppStorage` instances keep the backend captured at initialization. |
 | `NotificationService.current` | `nonisolated(unsafe)` mutable global | Accept temporarily for callback ergonomics; prefer environment/action injection long term. |
 | `PulseTimer` / `CursorTimer` | Structured timer tasks + locked counters | Fixed in this pass with Swift concurrency tasks and locks around shared timer state. |
 | `ThemeManager`, `FocusManager`, `StatusBarState`, `TUIContext` | `@unchecked Sendable` but intended main-loop scoped | Accept only when owned by `AppRunner`; add docs/tests before exposing cross-thread use. |
@@ -97,39 +97,37 @@ Recommendation:
 
 Invariant:
 
-- Intended to be configured during process startup before any `@AppStorage` property is initialized.
-- Concrete default backend (`JSONFileStorage`) is internally locked.
+- The process default backend can still be configured through the source-compatible `StorageDefaults.backend` property.
+- Get/set access is synchronized by a private lock-backed box.
+- Existing `@AppStorage` instances keep the backend captured at initialization, matching the previous behavior.
+- Concrete default backend (`JSONFileStorage`) is internally locked and snapshots its cache before asynchronous disk writes.
 
-Risk:
+Resolved risk:
 
-- The static backend can be changed while views are being initialized, creating mixed storage backends.
-- The static mutation is not synchronized.
+- Concurrent reads/writes of the default backend no longer race on an unsynchronized static variable.
 
-Recommendation:
+Remaining guidance:
 
-- Add a lock-backed setter/getter or freeze-on-first-read semantics.
-- Document that backend replacement must happen before app startup until the API is hardened.
+- Prefer configuring the default backend during app startup so all `@AppStorage` properties use the same backend identity.
 
 ### Needs technical remediation
 
 #### `Sources/TUIkitView/Rendering/RenderCache.swift` — `RenderCache.shared`
 
-Invariant today:
+Current invariant:
 
-- Runtime rendering is expected to use a single main-loop-owned render cache.
-- `TUIContext` currently defaults to `RenderCache.shared`.
+- Runtime rendering uses a `TUIContext`-owned `RenderCache` by default.
+- `StateStorage` creates `StateBox` instances wired to the same owning cache, so `@State` changes invalidate the correct app/session cache.
+- `RenderCache.shared` remains as a locked compatibility fallback for standalone `StateBox` / `StateStorage` usage outside a `TUIContext`.
 
-Risk:
+Resolved risk:
 
-- The type is `@unchecked Sendable` but has no lock.
-- Tests or multiple contexts can share cache state unexpectedly.
-- Source comments say no locking is required, but the public `shared` instance makes accidental cross-thread or cross-context use possible.
+- New `TUIContext()` instances no longer share memoized subtree state.
+- Background task state publication can invalidate cache entries safely because `RenderCache` is locked.
 
-Recommendation:
+Remaining recommendation:
 
-- Prefer a fresh `RenderCache()` per `TUIContext` instead of `RenderCache.shared` for app runtime ownership.
-- Keep `shared` only as a deprecated compatibility fallback or remove it before 1.0.
-- If `shared` remains public, protect mutable state with a lock and document ownership.
+- Decide before 1.0 whether `RenderCache.shared` stays public as an advanced fallback, becomes deprecated, or is removed from public API.
 
 ## `@unchecked Sendable` inventory
 
@@ -175,6 +173,7 @@ TUIkit now has the first concrete pieces of its SwiftUI-like concurrency model:
 
 - Added `TUIRuntimeActor` as the explicit runtime/interaction-lane actor marker.
 - Added `TUIRuntime.runInBackground(priority:operation:)` for work that must not inherit the runtime/main actor.
+- Added per-context render performance monitoring exposed through `EnvironmentValues.renderPerformance` for lightweight diagnostics such as the example app's live FPS readout.
 - `LifecycleManager.startTask` now uses detached background tasks, so `.task` work does not freeze input handling or rendering by inheriting the interaction loop.
 - `PulseTimer` and `CursorTimer` now use structured Swift concurrency tasks instead of `DispatchSourceTimer`.
 - `PulseTimer` protects `currentStep` and task lifecycle with `NSLock`.
@@ -200,15 +199,15 @@ Decision:
 
 Decision:
 
-- Highest-priority follow-up from this audit.
-- Runtime contexts should own their render cache instead of sharing global cache state.
+- Runtime ownership follow-up completed: `TUIContext` now creates a fresh render cache by default and wires `StateStorage` to it.
+- `RenderCache.shared` remains only as a compatibility fallback for standalone storage/box usage.
 
 ### `StorageDefaults.backend`
 
 Decision:
 
-- Accept for pre-1.0 with startup-only configuration guidance.
-- Harden with synchronization or freeze semantics before beta.
+- Accept for pre-1.0 as a lock-backed process default.
+- Public get/set API is preserved; replacement remains best done during startup so existing `@AppStorage` wrappers do not intentionally retain an older backend.
 
 ### `LocalizationService.shared`
 
@@ -228,17 +227,16 @@ Decision:
 
 Required before beta-quality runtime claims:
 
-1. Replace `TUIContext`'s default `RenderCache.shared` with per-context `RenderCache()` ownership. `RenderCache` is now locked, but per-context ownership is still cleaner for multi-session isolation.
-2. Harden `StorageDefaults.backend` with synchronized access or freeze-on-first-read semantics.
-3. Add source-level invariant comments for each `@unchecked Sendable` type that is main-loop-confined rather than generally thread-safe.
-4. Add lifecycle stress tests for `.task()` cancellation during rapid appear/disappear and app shutdown.
-5. Add render invalidation stress tests for rapid timer ticks, focus changes, and state changes.
-6. Decide whether `NotificationService.current` remains public API or moves behind an environment/action context before 1.0.
-7. Gradually annotate runtime-owned managers with `TUIRuntimeActor` as APIs become async-safe.
-8. Evaluate whether `StateRegistration` can become explicit render-local state instead of static render globals.
+1. Decide whether `RenderCache.shared` remains public API, becomes deprecated, or is removed before 1.0.
+2. Add source-level invariant comments for each `@unchecked Sendable` type that is main-loop-confined rather than generally thread-safe.
+3. Add lifecycle stress tests for `.task()` cancellation during rapid appear/disappear and app shutdown.
+4. Add render invalidation stress tests for rapid timer ticks, focus changes, and state changes.
+5. Decide whether `NotificationService.current` remains public API or moves behind an environment/action context before 1.0.
+6. Gradually annotate runtime-owned managers with `TUIRuntimeActor` as APIs become async-safe.
+7. Evaluate whether `StateRegistration` can become explicit render-local state instead of static render globals.
 
 ## Current readiness interpretation
 
 The framework has a coherent single-threaded runtime model, and several core shared services are already locked. The main production risks are not broad unsafe behavior everywhere; they are a few static/global escape hatches that need ownership cleanup before beta/1.0.
 
-This audit moves Workstream 3 from unknown to mapped: the next implementation PR should tackle `RenderCache.shared` ownership first.
+This audit moves Workstream 3 from unknown to mapped. The `RenderCache.shared` runtime ownership follow-up is complete, and `StorageDefaults.backend` now has synchronized access. The next highest-risk shared-state item is `NotificationService.current`.

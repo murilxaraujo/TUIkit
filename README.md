@@ -25,7 +25,7 @@
 >
 > See [Production Readiness Plan](docs/ProductionReadinessPlan.md) for the roadmap toward a first-class production TUI framework.
 > See [API Stability Policy](docs/APIStability.md) for current pre-1.0 API compatibility and migration rules.
-> See [Known Limitations](docs/KnownLimitations.md) and [Terminal Compatibility](docs/TerminalCompatibility.md) before evaluating production use.
+> See [Known Limitations](docs/KnownLimitations.md), [Terminal Compatibility](docs/TerminalCompatibility.md), and the [Release Validation Checklist](docs/ReleaseValidationChecklist.md) before evaluating production use.
 
 A SwiftUI-like framework for building Terminal User Interfaces in Swift: no ncurses, no C dependencies, just pure Swift.
 
@@ -123,7 +123,7 @@ struct ContentView: View {
 make example
 ```
 
-This runs `swift run TUIkitExample`. Press `q` or `ESC` to exit.
+This runs `swift run TUIkitExample`. Press `q`, `ESC`, or `Ctrl+C` to exit. During production-readiness validation, confirm the header shows platform information plus live FPS (for example, `macOS 27.0 · arm64 · 60.0 FPS`) and that resize, focus/cursor animations, async responsiveness, and terminal cleanup behave correctly. See the [Release Validation Checklist](docs/ReleaseValidationChecklist.md).
 
 ## Installation
 

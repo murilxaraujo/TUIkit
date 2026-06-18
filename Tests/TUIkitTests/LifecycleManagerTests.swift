@@ -275,6 +275,61 @@ struct LifecycleManagerTaskTests {
         // Verify clean state
         #expect(manager.hasAppeared(token: "task-1") == false)
     }
+
+    @Test("rapid appear/disappear cancels each task before reappearance")
+    func rapidAppearDisappearCancelsEachTaskBeforeReappearance() async throws {
+        let manager = LifecycleManager()
+        let probe = TaskLifecycleProbe()
+        let token = "rapid-task-view"
+        let cycles = 20
+
+        for cycle in 0..<cycles {
+            manager.beginRenderPass()
+            let shouldStartTask = !manager.hasAppeared(token: token)
+            _ = manager.recordAppear(token: token) {}
+            if shouldStartTask {
+                manager.startTask(token: token, priority: .medium) {
+                    await probe.runTask(index: cycle)
+                }
+            }
+            manager.registerDisappear(token: token) { [manager] in
+                manager.cancelTask(token: token)
+            }
+            manager.endRenderPass()
+
+            try await probe.waitForStartedCount(cycle + 1)
+
+            manager.beginRenderPass()
+            manager.endRenderPass()
+
+            try await probe.waitForCancelledCount(cycle + 1)
+            #expect(manager.hasAppeared(token: token) == false)
+        }
+
+        #expect(probe.startedCount == cycles)
+        #expect(probe.cancelledCount == cycles)
+    }
+
+    @Test("TUIContext reset cancels lifecycle background tasks")
+    func contextResetCancelsLifecycleBackgroundTasks() async throws {
+        let context = TUIContext()
+        let probe = TaskLifecycleProbe()
+        let taskCount = 8
+
+        for index in 0..<taskCount {
+            context.lifecycle.startTask(token: "shutdown-task-\(index)", priority: .medium) {
+                await probe.runTask(index: index)
+            }
+        }
+
+        try await probe.waitForStartedCount(taskCount)
+        context.reset()
+        try await probe.waitForCancelledCount(taskCount)
+
+        for index in 0..<taskCount {
+            #expect(context.lifecycle.hasAppeared(token: "shutdown-task-\(index)") == false)
+        }
+    }
 }
 
 private func isCurrentThreadMain() -> Bool {
@@ -313,5 +368,112 @@ private final class TaskExecutionProbe: @unchecked Sendable {
         _executed = true
         _ranOnMainThread = isMainThread
         lock.unlock()
+    }
+}
+
+private struct TaskLifecycleProbeTimeout: Error {}
+
+private func waitWithTimeout(
+    _ timeout: Duration,
+    operation: @escaping @Sendable () async -> Void
+) async throws {
+    try await withThrowingTaskGroup(of: Void.self) { group in
+        group.addTask {
+            await operation()
+        }
+        group.addTask {
+            try await Task.sleep(for: timeout)
+            throw TaskLifecycleProbeTimeout()
+        }
+
+        try await group.next()
+        group.cancelAll()
+    }
+}
+
+private final class TaskLifecycleProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var started: Set<Int> = []
+    private var cancelled: Set<Int> = []
+    private var startedWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
+    private var cancelledWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
+
+    var startedCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return started.count
+    }
+
+    var cancelledCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return cancelled.count
+    }
+
+    func runTask(index: Int) async {
+        markStarted(index)
+        await withTaskCancellationHandler {
+            try? await Task.sleep(for: .seconds(10))
+        } onCancel: {
+            self.markCancelled(index)
+        }
+    }
+
+    func waitForStartedCount(_ expectedCount: Int, timeout: Duration = .seconds(1)) async throws {
+        try await waitWithTimeout(timeout) {
+            await self.waitForStartedCountUnbounded(expectedCount)
+        }
+    }
+
+    func waitForCancelledCount(_ expectedCount: Int, timeout: Duration = .seconds(1)) async throws {
+        try await waitWithTimeout(timeout) {
+            await self.waitForCancelledCountUnbounded(expectedCount)
+        }
+    }
+
+    private func waitForStartedCountUnbounded(_ expectedCount: Int) async {
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if started.count >= expectedCount {
+                lock.unlock()
+                continuation.resume()
+            } else {
+                startedWaiters.append((expectedCount, continuation))
+                lock.unlock()
+            }
+        }
+    }
+
+    private func waitForCancelledCountUnbounded(_ expectedCount: Int) async {
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if cancelled.count >= expectedCount {
+                lock.unlock()
+                continuation.resume()
+            } else {
+                cancelledWaiters.append((expectedCount, continuation))
+                lock.unlock()
+            }
+        }
+    }
+
+    private func markStarted(_ index: Int) {
+        lock.lock()
+        started.insert(index)
+        let resumable = startedWaiters.filter { started.count >= $0.0 }.map(\.1)
+        startedWaiters.removeAll { started.count >= $0.0 }
+        lock.unlock()
+
+        resumable.forEach { $0.resume() }
+    }
+
+    private func markCancelled(_ index: Int) {
+        lock.lock()
+        cancelled.insert(index)
+        let resumable = cancelledWaiters.filter { cancelled.count >= $0.0 }.map(\.1)
+        cancelledWaiters.removeAll { cancelled.count >= $0.0 }
+        lock.unlock()
+
+        resumable.forEach { $0.resume() }
     }
 }
