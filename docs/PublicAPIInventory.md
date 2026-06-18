@@ -8,13 +8,13 @@ Generated: 2026-06-18
 
 ## Summary
 
-Total public declarations found: **741**
+Total public declarations found: **728**
 
 ### By target
 
 | Target | Public declarations |
 |--------|---------------------|
-| `TUIkit` | 435 |
+| `TUIkit` | 422 |
 | `TUIkitCore` | 44 |
 | `TUIkitImage` | 30 |
 | `TUIkitStyling` | 82 |
@@ -26,8 +26,8 @@ Total public declarations found: **741**
 |----------------|-------|
 | Context extension | 21 |
 | Experimental | 249 |
-| Internal-leak candidate | 106 |
-| Stable candidate | 365 |
+| Internal-leak candidate | 97 |
+| Stable candidate | 361 |
 
 ## Classification key
 
@@ -151,13 +151,9 @@ Total public declarations found: **741**
 | Internal-leak candidate | `func` | `renderToBuffer` | `Sources/TUIkit/Modifiers/AlertPresentationModifier.swift:62` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
 | Internal-leak candidate | `struct` | `BackgroundModifier` | `Sources/TUIkit/Modifiers/BackgroundModifier.swift:11` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
 | Stable candidate | `func` | `modify` | `Sources/TUIkit/Modifiers/BackgroundModifier.swift:15` | Primary app-facing TUIkit API surface. |
-| Internal-leak candidate | `struct` | `BadgeModifier` | `Sources/TUIkit/Modifiers/BadgeModifier.swift:17` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
-| Stable candidate | `var` | `body` | `Sources/TUIkit/Modifiers/BadgeModifier.swift:24` | Primary app-facing TUIkit API surface. |
 | Stable candidate | `enum` | `BadgeValue` | `Sources/TUIkit/Modifiers/BadgeModifier.swift:32` | Primary app-facing TUIkit API surface. |
 | Stable candidate | `var` | `isHidden` | `Sources/TUIkit/Modifiers/BadgeModifier.swift:40` | Primary app-facing TUIkit API surface. |
 | Stable candidate | `var` | `displayText` | `Sources/TUIkit/Modifiers/BadgeModifier.swift:50` | Primary app-facing TUIkit API surface. |
-| Internal-leak candidate | `func` | `extractBadgeValue` | `Sources/TUIkit/Modifiers/BadgeModifier.swift:87` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
-| Internal-leak candidate | `func` | `renderToBuffer` | `Sources/TUIkit/Modifiers/BadgeModifier.swift:101` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
 | Internal-leak candidate | `struct` | `DimmedModifier` | `Sources/TUIkit/Modifiers/DimmedModifier.swift:16` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
 | Stable candidate | `var` | `body` | `Sources/TUIkit/Modifiers/DimmedModifier.swift:20` | Primary app-facing TUIkit API surface. |
 | Internal-leak candidate | `func` | `renderToBuffer` | `Sources/TUIkit/Modifiers/DimmedModifier.swift:62` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
@@ -168,21 +164,12 @@ Total public declarations found: **741**
 | Internal-leak candidate | `struct` | `KeyPressModifier` | `Sources/TUIkit/Modifiers/KeyPressModifier.swift:11` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
 | Stable candidate | `var` | `body` | `Sources/TUIkit/Modifiers/KeyPressModifier.swift:22` | Primary app-facing TUIkit API surface. |
 | Internal-leak candidate | `func` | `renderToBuffer` | `Sources/TUIkit/Modifiers/KeyPressModifier.swift:30` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
-| Internal-leak candidate | `struct` | `ListRowSeparatorModifier` | `Sources/TUIkit/Modifiers/ListRowSeparatorModifier.swift:14` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
-| Stable candidate | `var` | `body` | `Sources/TUIkit/Modifiers/ListRowSeparatorModifier.swift:24` | Primary app-facing TUIkit API surface. |
 | Stable candidate | `enum` | `Visibility` | `Sources/TUIkit/Modifiers/ListRowSeparatorModifier.swift:34` | Primary app-facing TUIkit API surface. |
 | Stable candidate | `enum` | `VerticalEdge` | `Sources/TUIkit/Modifiers/ListRowSeparatorModifier.swift:50` | Primary app-facing TUIkit API surface. |
 | Stable candidate | `struct` | `Set` | `Sources/TUIkit/Modifiers/ListRowSeparatorModifier.swift:58` | Primary app-facing TUIkit API surface. |
 | Stable candidate | `let` | `rawValue` | `Sources/TUIkit/Modifiers/ListRowSeparatorModifier.swift:59` | Primary app-facing TUIkit API surface. |
-| Internal-leak candidate | `func` | `renderToBuffer` | `Sources/TUIkit/Modifiers/ListRowSeparatorModifier.swift:91` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
-| Internal-leak candidate | `struct` | `ModalPresentationModifier` | `Sources/TUIkit/Modifiers/ModalPresentationModifier.swift:26` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
-| Stable candidate | `var` | `body` | `Sources/TUIkit/Modifiers/ModalPresentationModifier.swift:36` | Primary app-facing TUIkit API surface. |
-| Internal-leak candidate | `func` | `renderToBuffer` | `Sources/TUIkit/Modifiers/ModalPresentationModifier.swift:47` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
 | Stable candidate | `func` | `navigationSplitViewColumnWidth` | `Sources/TUIkit/Modifiers/NavigationSplitViewColumnWidthModifier.swift:104` | Primary app-facing TUIkit API surface. |
 | Stable candidate | `func` | `navigationSplitViewColumnWidth` | `Sources/TUIkit/Modifiers/NavigationSplitViewColumnWidthModifier.swift:130` | Primary app-facing TUIkit API surface. |
-| Internal-leak candidate | `struct` | `OverlayModifier` | `Sources/TUIkit/Modifiers/OverlayModifier.swift:12` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
-| Stable candidate | `var` | `body` | `Sources/TUIkit/Modifiers/OverlayModifier.swift:22` | Primary app-facing TUIkit API surface. |
-| Internal-leak candidate | `func` | `renderToBuffer` | `Sources/TUIkit/Modifiers/OverlayModifier.swift:40` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
 | Stable candidate | `struct` | `EdgeInsets` | `Sources/TUIkit/Modifiers/PaddingModifier.swift:8` | Primary app-facing TUIkit API surface. |
 | Stable candidate | `var` | `top` | `Sources/TUIkit/Modifiers/PaddingModifier.swift:10` | Primary app-facing TUIkit API surface. |
 | Stable candidate | `var` | `leading` | `Sources/TUIkit/Modifiers/PaddingModifier.swift:13` | Primary app-facing TUIkit API surface. |

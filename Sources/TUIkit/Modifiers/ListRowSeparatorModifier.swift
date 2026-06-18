@@ -11,7 +11,7 @@
 /// styling that SwiftUI provides.
 ///
 /// A warning is logged when this modifier is used.
-public struct ListRowSeparatorModifier<Content: View>: View {
+struct ListRowSeparatorModifier<Content: View>: View {
     /// The content view.
     let content: Content
 
@@ -21,7 +21,7 @@ public struct ListRowSeparatorModifier<Content: View>: View {
     /// The edges to apply the separator to.
     let edges: VerticalEdge.Set
 
-    public var body: Never {
+    var body: Never {
         fatalError("ListRowSeparatorModifier renders via Renderable")
     }
 }
@@ -76,7 +76,7 @@ public enum VerticalEdge: Sendable {
 // MARK: - Equatable
 
 extension ListRowSeparatorModifier: @preconcurrency Equatable where Content: Equatable {
-    public static func == (lhs: ListRowSeparatorModifier<Content>, rhs: ListRowSeparatorModifier<Content>) -> Bool {
+    static func == (lhs: ListRowSeparatorModifier<Content>, rhs: ListRowSeparatorModifier<Content>) -> Bool {
         lhs.content == rhs.content &&
         lhs.visibility == rhs.visibility &&
         lhs.edges == rhs.edges
@@ -88,7 +88,7 @@ extension Visibility: Equatable {}
 // MARK: - Renderable
 
 extension ListRowSeparatorModifier: Renderable {
-    public func renderToBuffer(context: RenderContext) -> FrameBuffer {
+    func renderToBuffer(context: RenderContext) -> FrameBuffer {
         // This is a stub modifier for SwiftUI API compatibility.
         // List row separators are not supported in terminal UIs.
         // We silently return content unchanged (no warning to avoid noise).

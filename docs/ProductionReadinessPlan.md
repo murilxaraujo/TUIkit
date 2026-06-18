@@ -74,8 +74,8 @@ Objective: align implementation with the framework's stated architecture rules.
 
 Tasks:
 
-- [ ] Audit public controls and modifiers for `body: Never` and `fatalError()` rendering paths.
-- [ ] Confirm which `Renderable` uses are acceptable primitives/private cores and which should become compositional public views.
+- [x] Audit public controls and modifiers for `body: Never` and `fatalError()` rendering paths. Initial pass recorded in [Architecture Audit](ArchitectureAudit.md).
+- [ ] Confirm which `Renderable` uses are acceptable primitives/private cores and which should become compositional public views. Initial implementation-only wrappers were made internal; remaining cases are queued in the audit.
 - [ ] Verify SwiftUI-equivalent APIs match SwiftUI naming, parameter order, bindings, and `@ViewBuilder` shapes where practical.
 - [ ] Document terminal-specific API deviations and rationale.
 - [ ] Audit modifier and environment propagation through containers and controls.
