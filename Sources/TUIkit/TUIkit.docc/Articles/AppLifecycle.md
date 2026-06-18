@@ -47,7 +47,7 @@ Before the main loop starts, `run()` prepares the terminal:
 
 | Step | What | Why |
 |------|------|-----|
-| 1 | Install signal handlers | Catch Ctrl+C (SIGINT) and terminal resize (SIGWINCH) |
+| 1 | Install signal handlers | Catch OS-delivered SIGINT and terminal resize (SIGWINCH) |
 | 2 | Enter alternate screen | Preserve the user's existing terminal content |
 | 3 | Hide cursor | Avoid cursor flicker during rendering |
 | 4 | Enable raw mode | Disable line buffering, echo, and signal processing |
@@ -92,32 +92,38 @@ All triggers set boolean flags. The actual rendering always happens on the main 
 
 | Signal | Trigger | Effect |
 |--------|---------|--------|
-| `SIGINT` | Ctrl+C | Sets a shutdown flag → main loop exits |
+| `SIGINT` | OS-delivered interrupt | Sets a shutdown flag → main loop exits |
 | `SIGWINCH` | Terminal resize | Sets a re-render flag → next iteration re-renders |
 
 Signal handlers only set `nonisolated(unsafe)` boolean flags: no allocations, no locks. The main loop reads these flags each iteration and acts accordingly.
 
+Because TUIkit raw mode disables POSIX `ISIG`, pressing Ctrl+C usually arrives as a raw `Ctrl+C` key event rather than an OS signal. `InputHandler` treats that event as a global interrupt and exits through the same cleanup path.
+
 ## Key Event Dispatch
 
-When the terminal delivers a key event, the `InputHandler` dispatches it through five layers. Layer 0 and Layer 3 are mutually exclusive based on `focusManager.hasTextInputFocus`:
+When the terminal delivers a key event, the `InputHandler` dispatches it through six layers. Layer 1 and Layer 4 are mutually exclusive based on `focusManager.hasTextInputFocus`:
 
-### Layer 0: Text Input (conditional)
+### Layer 0: Global Interrupt
+
+Ctrl+C is handled first as a global quit request. This preserves terminal expectations in raw mode and prevents focused controls or custom key handlers from swallowing the interrupt.
+
+### Layer 1: Text Input (conditional)
 
 When a text input element (TextField/SecureField) is focused, `focusManager.dispatchKeyEvent()` runs first. This ensures printable characters, backspace, delete, arrows, home, end, and enter reach the text field before any other layer. Only keys the text field does not consume (Escape, Tab, unhandled Ctrl+shortcuts) fall through.
 
-### Layer 1: Status Bar Items
+### Layer 2: Status Bar Items
 
 ``StatusBarState`` checks if any status bar item matches the key. Items can match single characters, special keys (Escape, Enter), or arrow keys. If a match is found, the item's action runs and dispatch stops.
 
-### Layer 2: View-Registered Handlers
+### Layer 3: View-Registered Handlers
 
 The `KeyEventDispatcher` iterates handlers registered via `onKeyPress()` modifiers: in reverse order (newest first). If a handler returns `true`, dispatch stops.
 
-### Layer 3: Focus System (conditional)
+### Layer 4: Focus System (conditional)
 
-Skipped when text input has focus (Layer 0 already ran). Otherwise, `focusManager.dispatchKeyEvent()` first delegates to the focused element's `handleKeyEvent()`, then handles Tab/Shift+Tab for focus cycling, then arrow keys as section navigation fallback.
+Skipped when text input has focus (Layer 1 already ran). Otherwise, `focusManager.dispatchKeyEvent()` first delegates to the focused element's `handleKeyEvent()`, then handles Tab/Shift+Tab for focus cycling, then arrow keys as section navigation fallback.
 
-### Layer 4: Default Bindings
+### Layer 5: Default Bindings
 
 Built-in key bindings that apply when no handler consumed the event:
 

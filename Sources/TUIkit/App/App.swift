@@ -71,7 +71,7 @@ extension App {
 /// `AppRunner` is the main coordinator that owns the run loop and
 /// delegates to specialized managers:
 /// - `SignalManager` - POSIX signal handling (SIGINT, SIGWINCH)
-/// - `InputHandler` - Key event dispatch (status bar, views, defaults)
+/// - `InputHandler` - Key event dispatch (global Ctrl+C interrupt, status bar, views, defaults)
 /// - `RenderLoop` — Rendering pipeline (scene + status bar)
 @MainActor
 internal final class AppRunner<A: App> {
@@ -157,7 +157,8 @@ extension AppRunner {
 
         // Main loop
         while isRunning {
-            // Check for graceful shutdown request (from SIGINT handler)
+            // Check for graceful shutdown request (from SIGINT handler).
+            // Ctrl+C in raw mode is handled as a key event by InputHandler.
             if signals.shouldShutdown {
                 isRunning = false
                 break

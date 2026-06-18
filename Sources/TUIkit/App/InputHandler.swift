@@ -42,6 +42,15 @@ extension InputHandler {
     ///
     /// - Parameter event: The key event to handle.
     func handle(_ event: KeyEvent) {
+        // Raw terminal mode disables POSIX ISIG processing, so Ctrl+C arrives
+        // as a key event instead of SIGINT. Treat it as a global interrupt
+        // before focused text inputs or view handlers can consume it, matching
+        // terminal user expectations and ensuring cleanup runs through AppRunner.
+        if event.isInterruptShortcut {
+            onQuit()
+            return
+        }
+
         // Text-Input Priority: when a text-input element (TextField/SecureField)
         // is focused, let it handle the event FIRST. This ensures printable
         // characters, backspace, delete, arrows, home, end, and enter reach the
@@ -93,5 +102,15 @@ extension InputHandler {
         default:
             break
         }
+    }
+}
+
+private extension KeyEvent {
+    /// Ctrl+C as delivered by TUIkit raw mode.
+    var isInterruptShortcut: Bool {
+        guard ctrl, !alt, !shift, case .character(let character) = key else {
+            return false
+        }
+        return character == "c" || character == "C"
     }
 }

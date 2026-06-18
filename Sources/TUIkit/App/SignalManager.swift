@@ -45,9 +45,12 @@ nonisolated(unsafe) private var signalTerminalResized = false
 
 /// Flag set by the SIGINT signal handler to request a graceful shutdown.
 ///
-/// The actual cleanup (disabling raw mode, restoring cursor, exiting
-/// alternate screen) happens in the main loop. Signal handlers must
-/// not call non-async-signal-safe functions like `write()` or `fflush()`.
+/// In TUIkit raw mode, Ctrl+C is normally delivered as a key event because
+/// ISIG is disabled; `InputHandler` handles that path. This flag remains
+/// necessary for SIGINT delivered outside raw input processing. The actual
+/// cleanup (disabling raw mode, restoring cursor, exiting alternate screen)
+/// happens in the main loop. Signal handlers must not call non-async-signal-safe
+/// functions like `write()` or `fflush()`.
 nonisolated(unsafe) private var signalNeedsShutdown = false
 
 // MARK: - Signal Manager
@@ -115,7 +118,8 @@ extension SignalManager {
 
     /// Installs POSIX signal handlers for SIGINT and SIGWINCH.
     ///
-    /// - SIGINT (Ctrl+C): Sets the shutdown flag for graceful cleanup.
+    /// - SIGINT: Sets the shutdown flag for graceful cleanup when delivered by the OS.
+    ///   Ctrl+C in TUIkit raw mode is handled by `InputHandler` as a key event.
     /// - SIGWINCH (terminal resize): Sets the rerender flag.
     ///
     /// Signal handlers only set boolean flags — all actual work

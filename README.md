@@ -25,6 +25,7 @@
 >
 > See [Production Readiness Plan](docs/ProductionReadinessPlan.md) for the roadmap toward a first-class production TUI framework.
 > See [API Stability Policy](docs/APIStability.md) for current pre-1.0 API compatibility and migration rules.
+> See [Known Limitations](docs/KnownLimitations.md) and [Terminal Compatibility](docs/TerminalCompatibility.md) before evaluating production use.
 
 A SwiftUI-like framework for building Terminal User Interfaces in Swift: no ncurses, no C dependencies, just pure Swift.
 
@@ -253,6 +254,7 @@ Tests/
 - Tests use Swift Testing (`@Test`, `#expect`): run with `swift test`
 - All 1172 tests run in parallel
 - The `Terminal` class handles raw mode and cursor control via POSIX `termios`
+- See [Known Limitations](docs/KnownLimitations.md) and [Terminal Compatibility](docs/TerminalCompatibility.md) when validating real terminal behavior.
 
 ## License
 
