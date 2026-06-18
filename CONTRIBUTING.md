@@ -36,8 +36,29 @@ swift-format format -i -r Sources Tests
 3. CI must be green (macOS + Linux)
 4. No new SwiftLint warnings
 5. Follow the architecture and API rules below
+6. Update `CHANGELOG.md` for public API changes
 
 ## Architecture
+
+### Public API Stability
+
+TUIkit is pre-1.0. Public API changes must follow [API Stability Policy](docs/APIStability.md).
+
+Before adding or changing public API:
+
+- Check whether there is an equivalent SwiftUI API and match naming, parameter order, bindings, and `@ViewBuilder` shapes where practical.
+- Decide whether the API is a stable candidate, experimental, internal-leak candidate, or deprecated candidate.
+- Add documentation comments for stable-candidate APIs.
+- Update `CHANGELOG.md` under the appropriate section.
+- Add migration notes for source-breaking changes.
+- Avoid exposing implementation details just to satisfy cross-target structure.
+- Confirm the API works on macOS and Linux.
+
+The current audit starting point is [Public API Inventory](docs/PublicAPIInventory.md). Refresh it with:
+
+```bash
+./scripts/dump-public-api.sh
+```
 
 ### SwiftUI API Parity
 

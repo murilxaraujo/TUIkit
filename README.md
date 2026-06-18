@@ -22,6 +22,9 @@
 
 > [!IMPORTANT]
 > **This project is currently a WORK IN PROGRESS! I strongly advise against using it in a production environment because APIs are subject to change at any time.**
+>
+> See [Production Readiness Plan](docs/ProductionReadinessPlan.md) for the roadmap toward a first-class production TUI framework.
+> See [API Stability Policy](docs/APIStability.md) for current pre-1.0 API compatibility and migration rules.
 
 A SwiftUI-like framework for building Terminal User Interfaces in Swift: no ncurses, no C dependencies, just pure Swift.
 
@@ -116,10 +119,10 @@ struct ContentView: View {
 ## Run the Example App
 
 ```bash
-swift run TUIkitExample
+make example
 ```
 
-Press `q` or `ESC` to exit.
+This runs `swift run TUIkitExample`. Press `q` or `ESC` to exit.
 
 ## Installation
 
