@@ -24,14 +24,14 @@
 ///
 /// Selection-disabled rows render with dimmed foreground color to indicate
 /// they cannot be selected.
-public struct SelectionDisabledModifier<Content: View>: View {
+struct SelectionDisabledModifier<Content: View>: View {
     /// The content to apply selection disabled to.
     let content: Content
 
     /// Whether selection is disabled.
     let isDisabled: Bool
 
-    public var body: Never {
+    var body: Never {
         fatalError("SelectionDisabledModifier renders via Renderable")
     }
 }
@@ -39,7 +39,7 @@ public struct SelectionDisabledModifier<Content: View>: View {
 // MARK: - Equatable
 
 extension SelectionDisabledModifier: @preconcurrency Equatable where Content: Equatable {
-    public static func == (lhs: SelectionDisabledModifier<Content>, rhs: SelectionDisabledModifier<Content>) -> Bool {
+    static func == (lhs: SelectionDisabledModifier<Content>, rhs: SelectionDisabledModifier<Content>) -> Bool {
         lhs.content == rhs.content && lhs.isDisabled == rhs.isDisabled
     }
 }
@@ -47,7 +47,7 @@ extension SelectionDisabledModifier: @preconcurrency Equatable where Content: Eq
 // MARK: - Renderable
 
 extension SelectionDisabledModifier: Renderable {
-    public func renderToBuffer(context: RenderContext) -> FrameBuffer {
+    func renderToBuffer(context: RenderContext) -> FrameBuffer {
         // Create modified environment with selection disabled state.
         let modifiedEnvironment = context.environment.setting(\.isSelectionDisabled, to: isDisabled)
         let modifiedContext = context.withEnvironment(modifiedEnvironment)

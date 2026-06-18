@@ -23,7 +23,7 @@
 ///     Text("Are you sure?")
 /// }
 /// ```
-public struct AlertPresentationModifier<Content: View, Actions: View, Message: View>: View {
+struct AlertPresentationModifier<Content: View, Actions: View, Message: View>: View {
     /// The base content to render.
     let content: Content
 
@@ -48,7 +48,7 @@ public struct AlertPresentationModifier<Content: View, Actions: View, Message: V
     /// Alert title color (optional).
     let titleColor: Color?
 
-    public var body: Never {
+    var body: Never {
         fatalError("AlertPresentationModifier renders via Renderable")
     }
 }
@@ -59,7 +59,7 @@ extension AlertPresentationModifier: Renderable {
     /// A stable section ID for alert focus sections.
     private static var alertSectionID: String { "__alert__" }
 
-    public func renderToBuffer(context: RenderContext) -> FrameBuffer {
+    func renderToBuffer(context: RenderContext) -> FrameBuffer {
         // If not presented, just return base content
         guard isPresented.wrappedValue else {
             return TUIkit.renderToBuffer(content, context: context)

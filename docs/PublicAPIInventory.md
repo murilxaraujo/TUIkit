@@ -8,13 +8,13 @@ Generated: 2026-06-18
 
 ## Summary
 
-Total public declarations found: **728**
+Total public declarations found: **713**
 
 ### By target
 
 | Target | Public declarations |
 |--------|---------------------|
-| `TUIkit` | 422 |
+| `TUIkit` | 407 |
 | `TUIkitCore` | 44 |
 | `TUIkitImage` | 30 |
 | `TUIkitStyling` | 82 |
@@ -26,8 +26,8 @@ Total public declarations found: **728**
 |----------------|-------|
 | Context extension | 21 |
 | Experimental | 249 |
-| Internal-leak candidate | 97 |
-| Stable candidate | 361 |
+| Internal-leak candidate | 88 |
+| Stable candidate | 355 |
 
 ## Classification key
 
@@ -146,24 +146,12 @@ Total public declarations found: **728**
 | Stable candidate | `func` | `string` | `Sources/TUIkit/Localization/LocalizationService.swift:115` | Primary app-facing TUIkit API surface. |
 | Stable candidate | `struct` | `LocalizedString` | `Sources/TUIkit/Localization/LocalizedString.swift:24` | Primary app-facing TUIkit API surface. |
 | Stable candidate | `var` | `body` | `Sources/TUIkit/Localization/LocalizedString.swift:35` | Primary app-facing TUIkit API surface. |
-| Internal-leak candidate | `struct` | `AlertPresentationModifier` | `Sources/TUIkit/Modifiers/AlertPresentationModifier.swift:26` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
-| Stable candidate | `var` | `body` | `Sources/TUIkit/Modifiers/AlertPresentationModifier.swift:51` | Primary app-facing TUIkit API surface. |
-| Internal-leak candidate | `func` | `renderToBuffer` | `Sources/TUIkit/Modifiers/AlertPresentationModifier.swift:62` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
 | Internal-leak candidate | `struct` | `BackgroundModifier` | `Sources/TUIkit/Modifiers/BackgroundModifier.swift:11` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
 | Stable candidate | `func` | `modify` | `Sources/TUIkit/Modifiers/BackgroundModifier.swift:15` | Primary app-facing TUIkit API surface. |
 | Stable candidate | `enum` | `BadgeValue` | `Sources/TUIkit/Modifiers/BadgeModifier.swift:32` | Primary app-facing TUIkit API surface. |
 | Stable candidate | `var` | `isHidden` | `Sources/TUIkit/Modifiers/BadgeModifier.swift:40` | Primary app-facing TUIkit API surface. |
 | Stable candidate | `var` | `displayText` | `Sources/TUIkit/Modifiers/BadgeModifier.swift:50` | Primary app-facing TUIkit API surface. |
-| Internal-leak candidate | `struct` | `DimmedModifier` | `Sources/TUIkit/Modifiers/DimmedModifier.swift:16` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
-| Stable candidate | `var` | `body` | `Sources/TUIkit/Modifiers/DimmedModifier.swift:20` | Primary app-facing TUIkit API surface. |
-| Internal-leak candidate | `func` | `renderToBuffer` | `Sources/TUIkit/Modifiers/DimmedModifier.swift:62` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
 | Stable candidate | `enum` | `FrameDimension` | `Sources/TUIkit/Modifiers/FrameModifier.swift:10` | Primary app-facing TUIkit API surface. |
-| Stable candidate | `struct` | `FlexibleFrameView` | `Sources/TUIkit/Modifiers/FrameModifier.swift:27` | Primary app-facing TUIkit API surface. |
-| Stable candidate | `var` | `body` | `Sources/TUIkit/Modifiers/FrameModifier.swift:52` | Primary app-facing TUIkit API surface. |
-| Internal-leak candidate | `func` | `renderToBuffer` | `Sources/TUIkit/Modifiers/FrameModifier.swift:75` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
-| Internal-leak candidate | `struct` | `KeyPressModifier` | `Sources/TUIkit/Modifiers/KeyPressModifier.swift:11` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
-| Stable candidate | `var` | `body` | `Sources/TUIkit/Modifiers/KeyPressModifier.swift:22` | Primary app-facing TUIkit API surface. |
-| Internal-leak candidate | `func` | `renderToBuffer` | `Sources/TUIkit/Modifiers/KeyPressModifier.swift:30` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
 | Stable candidate | `enum` | `Visibility` | `Sources/TUIkit/Modifiers/ListRowSeparatorModifier.swift:34` | Primary app-facing TUIkit API surface. |
 | Stable candidate | `enum` | `VerticalEdge` | `Sources/TUIkit/Modifiers/ListRowSeparatorModifier.swift:50` | Primary app-facing TUIkit API surface. |
 | Stable candidate | `struct` | `Set` | `Sources/TUIkit/Modifiers/ListRowSeparatorModifier.swift:58` | Primary app-facing TUIkit API surface. |
@@ -180,9 +168,6 @@ Total public declarations found: **728**
 | Internal-leak candidate | `struct` | `PaddingModifier` | `Sources/TUIkit/Modifiers/PaddingModifier.swift:90` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
 | Internal-leak candidate | `func` | `adjustContext` | `Sources/TUIkit/Modifiers/PaddingModifier.swift:94` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
 | Stable candidate | `func` | `modify` | `Sources/TUIkit/Modifiers/PaddingModifier.swift:101` | Primary app-facing TUIkit API surface. |
-| Internal-leak candidate | `struct` | `SelectionDisabledModifier` | `Sources/TUIkit/Modifiers/SelectionDisabledModifier.swift:27` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
-| Stable candidate | `var` | `body` | `Sources/TUIkit/Modifiers/SelectionDisabledModifier.swift:34` | Primary app-facing TUIkit API surface. |
-| Internal-leak candidate | `func` | `renderToBuffer` | `Sources/TUIkit/Modifiers/SelectionDisabledModifier.swift:50` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
 | Context extension | `extension` | `View` | `Sources/TUIkit/Modifiers/StatusBarSystemItemsModifier.swift:56` | Public extension scope; classify member declarations individually. |
 | Internal-leak candidate | `class` | `NotificationService` | `Sources/TUIkit/Notification/NotificationService.swift:76` | Public app-facing module symbol that appears implementation-oriented and needs boundary review. |
 | Stable candidate | `func` | `post` | `Sources/TUIkit/Notification/NotificationService.swift:113` | Primary app-facing TUIkit API surface. |

@@ -8,7 +8,7 @@
 ///
 /// The handler returns a Bool indicating whether the event was consumed.
 /// If false is returned, the event continues to propagate to other handlers.
-public struct KeyPressModifier<Content: View>: View {
+struct KeyPressModifier<Content: View>: View {
     /// The content view.
     let content: Content
 
@@ -19,7 +19,7 @@ public struct KeyPressModifier<Content: View>: View {
     /// Returns true if the event was handled, false to let it propagate.
     let handler: (KeyEvent) -> Bool
 
-    public var body: Never {
+    var body: Never {
         fatalError("KeyPressModifier renders via Renderable")
     }
 }
@@ -27,7 +27,7 @@ public struct KeyPressModifier<Content: View>: View {
 // MARK: - Renderable
 
 extension KeyPressModifier: Renderable {
-    public func renderToBuffer(context: RenderContext) -> FrameBuffer {
+    func renderToBuffer(context: RenderContext) -> FrameBuffer {
         // Register the key handler
         context.environment.keyEventDispatcher!.addHandler { [keys, handler] event in
             // Check if we should handle this key

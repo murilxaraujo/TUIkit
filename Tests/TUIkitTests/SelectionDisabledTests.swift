@@ -22,21 +22,20 @@ struct SelectionDisabledModifierTests {
 
     @Test("Modifier sets environment value to true")
     func modifierSetsEnvironmentTrue() {
-        let view = Text("Test").selectionDisabled()
-
-        // Create context and render to propagate environment
+        let view = SelectionFlagProbe().selectionDisabled()
         let context = createTestContext()
-        _ = renderToBuffer(view, context: context)
+        let buffer = renderToBuffer(view, context: context)
 
-        // The modifier should have set isSelectionDisabled in the environment
-        // We verify this by checking that the modifier was created correctly
-        #expect(view is SelectionDisabledModifier<Text>)
+        #expect(buffer.lines == ["disabled"])
     }
 
     @Test("Modifier with false does not disable selection")
     func modifierWithFalseDoesNotDisable() {
-        let view = Text("Test").selectionDisabled(false)
-        #expect(view is SelectionDisabledModifier<Text>)
+        let view = SelectionFlagProbe().selectionDisabled(false)
+        let context = createTestContext()
+        let buffer = renderToBuffer(view, context: context)
+
+        #expect(buffer.lines == ["enabled"])
     }
 
     @Test("Environment can be set and read")
@@ -63,6 +62,16 @@ struct SelectionDisabledModifierTests {
 }
 
 // MARK: - Test Helpers
+
+private struct SelectionFlagProbe: View, Renderable {
+    var body: Never {
+        fatalError("SelectionFlagProbe renders via Renderable")
+    }
+
+    func renderToBuffer(context: RenderContext) -> FrameBuffer {
+        FrameBuffer(lines: [context.environment.isSelectionDisabled ? "disabled" : "enabled"])
+    }
+}
 
 @MainActor
 private func createTestContext(width: Int = 80, height: Int = 24) -> RenderContext {

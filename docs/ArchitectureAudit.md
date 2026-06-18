@@ -33,11 +33,10 @@ The scan found several categories:
 | Leaf primitives | `Text`, `Spacer`, `Divider` | Keep as documented primitive exceptions. |
 | Structural view engine primitives | `EmptyView`, `TupleView`, `AnyView`, `ModifiedView`, `EquatableView`, `ForEach` | Keep for now; review as part of lower-level API stabilization. |
 | Private/internal render cores | `_ButtonCore`, `_ListCore`, `_TableCore`, `_VStackCore`, `_ImageCore` | Keep; direct rendering is the intended role. |
-| Public implementation wrappers | `BadgeModifier`, `OverlayModifier`, `ModalPresentationModifier`, `ListRowSeparatorModifier` | Make internal so public API is the extension method, not the render wrapper. |
-| Remaining public modifier wrappers | `KeyPressModifier`, `AlertPresentationModifier`, `DimmedModifier`, `SelectionDisabledModifier`, `FlexibleFrameView` | Leave for follow-up audit to avoid broad source compatibility changes in one step. |
+| Public implementation wrappers | `BadgeModifier`, `OverlayModifier`, `ModalPresentationModifier`, `ListRowSeparatorModifier`, `KeyPressModifier`, `AlertPresentationModifier`, `DimmedModifier`, `SelectionDisabledModifier`, `FlexibleFrameView` | Make internal so public API is the extension method, not the render wrapper. |
 | Internal terminal-only utilities | `AppHeader` | Keep internal `Renderable`; document as acceptable terminal chrome. |
 
-## Changes made in this pass
+## Changes made
 
 The following render wrappers were made internal implementation details:
 
@@ -45,6 +44,11 @@ The following render wrappers were made internal implementation details:
 - `OverlayModifier`
 - `ModalPresentationModifier`
 - `ListRowSeparatorModifier`
+- `KeyPressModifier`
+- `AlertPresentationModifier`
+- `DimmedModifier`
+- `SelectionDisabledModifier`
+- `FlexibleFrameView`
 - `extractBadgeValue(from:)`
 
 The public app-facing APIs remain available through extension methods:
@@ -52,9 +56,14 @@ The public app-facing APIs remain available through extension methods:
 - `.badge(_:)`
 - `.overlay(alignment:content:)`
 - `.modal(isPresented:content:)`
+- `.alert(...)`
+- `.dimmed()`
+- `.selectionDisabled(_:)`
+- `.frame(...)`
+- `.onKeyPress(...)`
 - `.listRowSeparator(_:edges:)`
 
-`BadgeValue`, `Visibility`, and `VerticalEdge` remain public because they are part of app-facing API or observable row/list behavior.
+`BadgeValue`, `Visibility`, `VerticalEdge`, and `FrameDimension` remain public because they are part of app-facing API or observable row/list/layout behavior.
 
 ## Rationale
 
@@ -62,33 +71,41 @@ These types are render wrappers, not concepts app authors should construct direc
 
 Tests use `@testable import TUIkit`, so they can still directly validate internal wrappers where focused rendering coverage is useful.
 
+## Remaining public primitive exceptions
+
+After the cleanup, the remaining `public var body: Never` cases are intentionally public structural or leaf primitives:
+
+| Symbol | File | Decision |
+|--------|------|----------|
+| `Text` | `Sources/TUIkit/Views/Text.swift` | Keep public leaf primitive; direct terminal text rendering is its core behavior. |
+| `Spacer` | `Sources/TUIkit/Views/Spacer.swift` | Keep public leaf/layout primitive. |
+| `Divider` | `Sources/TUIkit/Views/Spacer.swift` | Keep public leaf/layout primitive. |
+| `ForEach` | `Sources/TUIkit/Views/ForEach.swift` | Keep public structural primitive, matching SwiftUI's structural collection role. It does not render standalone and is consumed by builders/extractors. |
+| `EmptyView` | `Sources/TUIkitView/Core/PrimitiveViews.swift` | Keep public structural primitive. |
+| `ConditionalView` | `Sources/TUIkitView/Core/PrimitiveViews.swift` | Keep public result-builder structural primitive. |
+| `ViewArray` | `Sources/TUIkitView/Core/PrimitiveViews.swift` | Keep public result-builder/collection structural primitive. |
+| `AnyView` | `Sources/TUIkitView/Core/PrimitiveViews.swift` | Keep public type-erasure structural primitive. |
+| `Never` view conformance | `Sources/TUIkitView/Core/PrimitiveTypes+View.swift` | Keep public uninhabited helper required by the `View.Body == Never` model. |
+| `TupleView` | `Sources/TUIkitView/Core/TupleViews.swift` | Keep public result-builder structural primitive. |
+| `ModifiedView` | `Sources/TUIkitView/Core/ViewModifier.swift` | Keep public structural primitive returned by `.modifier(_:)`. |
+| `EquatableView` | `Sources/TUIkitView/Core/EquatableView.swift` | Keep public structural primitive returned by `.equatable()`. |
+
+These types form the framework's primitive/structural rendering model. They are documented exceptions to the “public controls should compose real views” rule because they are not app controls; they are the low-level building blocks that make the compositional model work.
+
 ## Follow-up audit queue
 
-Review these remaining public `body: Never` or direct-render wrapper types next:
+The broad public wrapper cleanup for Workstream 2 is complete. Remaining follow-ups move into API stabilization and documentation work:
 
-- `Sources/TUIkit/Modifiers/KeyPressModifier.swift`
-- `Sources/TUIkit/Modifiers/AlertPresentationModifier.swift`
-- `Sources/TUIkit/Modifiers/DimmedModifier.swift`
-- `Sources/TUIkit/Modifiers/SelectionDisabledModifier.swift`
-- `Sources/TUIkit/Modifiers/FrameModifier.swift` (`FlexibleFrameView`)
-- `Sources/TUIkit/Views/ForEach.swift`
-- `Sources/TUIkitView/Core/PrimitiveViews.swift`
-- `Sources/TUIkitView/Core/TupleViews.swift`
-- `Sources/TUIkitView/Core/ViewModifier.swift`
-- `Sources/TUIkitView/Core/EquatableView.swift`
-
-For each type, choose one of:
-
-1. Keep public and document it as a primitive/structural exception.
-2. Make the render wrapper internal and keep only the extension method public.
-3. Split into a public compositional wrapper plus private/internal render core.
-4. Replace direct construction tests with public API rendering tests if direct construction is not part of the contract.
+1. Add or refine DocC/comments for every documented primitive exception above.
+2. Review lower-level `TUIkitView` structural types during the public API stabilization pass to decide whether direct import of `TUIkitView` is a supported advanced use case.
+3. Prefer public extension-method tests for app-facing APIs; keep `@testable` direct-wrapper tests only where they verify implementation details that cannot be exercised through public API.
+4. Continue applying the same rule to new modifiers: public method first, internal render wrapper unless direct construction is an explicit API goal.
 
 ## Acceptance status
 
 - [x] Initial `body: Never` / `fatalError()` scan completed.
-- [x] First implementation-only public wrappers made internal.
+- [x] Implementation-only public wrappers made internal.
 - [x] App-facing modifier methods preserved.
 - [x] Public API inventory regenerated.
-- [ ] Remaining public render wrappers classified and fixed or documented.
-- [ ] Architecture guide updated with the final primitive exception list.
+- [x] Remaining public render wrappers classified and fixed or documented.
+- [x] Architecture audit updated with the final primitive exception list.

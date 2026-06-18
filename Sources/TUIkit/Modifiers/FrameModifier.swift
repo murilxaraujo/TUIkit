@@ -24,7 +24,7 @@ public enum FrameDimension: Equatable, Sendable {
 ///
 /// This view handles min/max constraints and renders content with
 /// the appropriate available space.
-public struct FlexibleFrameView<Content: View>: View {
+struct FlexibleFrameView<Content: View>: View {
     /// The content view to constrain.
     let content: Content
 
@@ -49,7 +49,7 @@ public struct FlexibleFrameView<Content: View>: View {
     /// The alignment of the content within the frame.
     let alignment: Alignment
 
-    public var body: Never {
+    var body: Never {
         fatalError("FlexibleFrameView renders via Renderable")
     }
 }
@@ -57,7 +57,7 @@ public struct FlexibleFrameView<Content: View>: View {
 // MARK: - Equatable Conformance
 
 extension FlexibleFrameView: @preconcurrency Equatable where Content: Equatable {
-    public static func == (lhs: FlexibleFrameView<Content>, rhs: FlexibleFrameView<Content>) -> Bool {
+    static func == (lhs: FlexibleFrameView<Content>, rhs: FlexibleFrameView<Content>) -> Bool {
         lhs.content == rhs.content &&
         lhs.minWidth == rhs.minWidth &&
         lhs.idealWidth == rhs.idealWidth &&
@@ -72,7 +72,7 @@ extension FlexibleFrameView: @preconcurrency Equatable where Content: Equatable 
 // MARK: - Renderable
 
 extension FlexibleFrameView: Renderable {
-    public func renderToBuffer(context: RenderContext) -> FrameBuffer {
+    func renderToBuffer(context: RenderContext) -> FrameBuffer {
         // Calculate the target width based on constraints
         let targetWidth: Int
         if let maximumWidth = maxWidth {

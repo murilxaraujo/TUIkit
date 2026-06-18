@@ -10,7 +10,7 @@ import Testing
 @testable import TUIkit
 
 @MainActor
-@Suite("OverlayModifier Tests")
+@Suite("Overlay Modifier Tests")
 struct OverlayModifierTests {
 
     /// Helper to create a RenderContext with default test settings.
@@ -29,22 +29,14 @@ struct OverlayModifierTests {
 
     @Test("Overlay with empty base returns overlay")
     func emptyBaseReturnsOverlay() {
-        let view = OverlayModifier(
-            base: EmptyView(),
-            overlay: Text("Over"),
-            alignment: .center
-        )
+        let view = EmptyView().overlay { Text("Over") }
         let buffer = render(view)
         #expect(buffer.lines[0].stripped == "Over")
     }
 
     @Test("Overlay with empty overlay returns base")
     func emptyOverlayReturnsBase() {
-        let view = OverlayModifier(
-            base: Text("Base"),
-            overlay: EmptyView(),
-            alignment: .center
-        )
+        let view = Text("Base").overlay { EmptyView() }
         let buffer = render(view)
         #expect(buffer.lines[0].stripped == "Base")
     }
@@ -53,11 +45,7 @@ struct OverlayModifierTests {
     func preservesBaseDimensions() {
         let base = Text("Hello World")
         let overlay = Text("Hi")
-        let view = OverlayModifier(
-            base: base,
-            overlay: overlay,
-            alignment: .center
-        )
+        let view = base.overlay { overlay }
         let baseBuffer = render(base)
         let overlayBuffer = render(view)
         #expect(overlayBuffer.width == baseBuffer.width)
@@ -68,7 +56,7 @@ struct OverlayModifierTests {
     func leadingAlignment() {
         let base = Text("Hello World")
         let overlay = Text("X")
-        let view = OverlayModifier(base: base, overlay: overlay, alignment: .leading)
+        let view = base.overlay(alignment: .leading) { overlay }
         let buffer = render(view)
         let line = buffer.lines[0].stripped
         #expect(line.hasPrefix("X"))
@@ -78,7 +66,7 @@ struct OverlayModifierTests {
     func trailingAlignment() {
         let base = Text("Hello World")
         let overlay = Text("X")
-        let view = OverlayModifier(base: base, overlay: overlay, alignment: .trailing)
+        let view = base.overlay(alignment: .trailing) { overlay }
         let buffer = render(view)
         let line = buffer.lines[0].stripped
         #expect(line.hasSuffix("X"))
@@ -92,7 +80,7 @@ struct OverlayModifierTests {
             Text("Line 3")
         }
         let overlay = Text("X")
-        let view = OverlayModifier(base: base, overlay: overlay, alignment: .topLeading)
+        let view = base.overlay(alignment: .topLeading) { overlay }
         let buffer = render(view)
         #expect(buffer.height >= 3)
         let firstLine = buffer.lines[0].stripped
@@ -107,7 +95,7 @@ struct OverlayModifierTests {
             Text("Line 3")
         }
         let overlay = Text("X")
-        let view = OverlayModifier(base: base, overlay: overlay, alignment: .bottomTrailing)
+        let view = base.overlay(alignment: .bottomTrailing) { overlay }
         let buffer = render(view)
         #expect(buffer.height >= 3)
         let lastLine = buffer.lines[buffer.height - 1].stripped

@@ -156,7 +156,7 @@ This path is used by:
 - **Layout containers**: `VStack`, `HStack`, `ZStack`
 - **Interactive views**: ``Button``, ``ButtonRow``, ``Menu``
 - **Container views**: ``Panel``, ``Card``, ``Alert``, ``Dialog``
-- **Modifier wrappers**: `ModifiedView`, `DimmedModifier`, `OverlayModifier`, `EnvironmentModifier`, ``EquatableView``, and all lifecycle modifiers
+- **Modifier wrappers**: `ModifiedView`, internal wrappers behind public modifiers such as `.dimmed()`, `.overlay(...)`, and `.frame(...)`, `EnvironmentModifier`, ``EquatableView``, and all lifecycle modifiers
 
 ### Path 2: Composition (body)
 
@@ -286,9 +286,9 @@ public protocol ViewModifier {
 More complex modifiers are full `View + Renderable` implementations that control when and how their content renders:
 
 - **`ContainerView` / `_ContainerViewCore`**: Reduces `availableWidth` by 2, renders content, adds border characters via `BorderRenderer`
-- **`FlexibleFrameView`**: Modifies `availableWidth`/`availableHeight` before rendering, applies min/max constraints and alignment after
-- **`OverlayModifier`**: Renders base and overlay separately, composites via `FrameBuffer.composited(with:at:)`
-- **`DimmedModifier`**: Renders content, then applies ANSI dim code to every line
+- **`.frame(...)` internal wrapper**: Modifies `availableWidth`/`availableHeight` before rendering, applies min/max constraints and alignment after
+- **`.overlay(...)` internal wrapper**: Renders base and overlay separately, composites via `FrameBuffer.composited(with:at:)`
+- **`.dimmed()` internal wrapper**: Renders content, then applies uniform dimmed styling to every line
 - **`EnvironmentModifier`**: Creates modified context, renders content with it
 - **``EquatableView``**: Checks `RenderCache` before rendering; returns cached buffer on hit, renders and stores on miss (see <doc:RenderCycle#Subtree-Memoization>)
 
@@ -412,7 +412,7 @@ The following types have `Equatable` conformance, enabling `.equatable()` on vie
 
 **Container views** (conditional: `where Content: Equatable`): `VStack`, `HStack`, `ZStack`, ``Panel``, ``Card``, ``Dialog``, `ContainerView`
 
-**Modifier views** (conditional): `FlexibleFrameView`, `OverlayModifier`, `DimmedModifier`
+**Modifier views** (conditional, implementation detail): internal wrappers behind `.frame(...)`, `.overlay(...)`, and `.dimmed()`
 
 **Supporting types:** `TextStyle`, `Alignment`, `ContainerConfig`, `ContainerStyle`
 
