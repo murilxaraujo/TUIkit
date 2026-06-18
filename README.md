@@ -116,10 +116,10 @@ struct ContentView: View {
 ## Run the Example App
 
 ```bash
-swift run TUIkitExample
+make example
 ```
 
-Press `q` or `ESC` to exit.
+This runs `swift run TUIkitExample`. Press `q` or `ESC` to exit.
 
 ## Installation
 

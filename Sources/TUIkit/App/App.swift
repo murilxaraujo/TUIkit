@@ -12,6 +12,8 @@
     import Darwin
 #endif
 
+import Foundation
+
 // MARK: - App Protocol
 
 /// The base protocol for TUIkit applications.
@@ -185,10 +187,16 @@ extension AppRunner {
                 eventsProcessed += 1
             }
 
+            // Give the main run loop a chance to execute enqueued MainActor
+            // continuations. TUIkit's run loop is synchronous; without this,
+            // Task { ... } created from key handlers can starve forever while
+            // the terminal loop keeps sleeping and polling input.
+            _ = RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.001))
+
             // Sleep ~24ms to yield CPU.
             // This sets the maximum frame rate to ~42 FPS.
             //
-            usleep(23_800)
+            usleep(22_800)
         }
 
         // Stop pulse timer before cleanup
