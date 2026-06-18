@@ -215,7 +215,10 @@ extension View {
 
     /// Starts an async task when this view appears.
     ///
-    /// The task is automatically cancelled when the view disappears.
+    /// The task is automatically cancelled when the view disappears. TUIkit runs
+    /// the task in the background so expensive work does not block input handling
+    /// or rendering; publish results back through state, bindings, observable
+    /// models, or an explicit actor hop.
     ///
     /// # Example
     ///

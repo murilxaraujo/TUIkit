@@ -48,9 +48,12 @@ import TUIkitCore
 ///
 /// ## Thread Safety
 ///
-/// `RenderCache` is accessed only from the main thread (TUIKit's single-threaded
-/// event loop). No locking is required.
+/// `RenderCache` is primarily owned by the render loop, but state updates can
+/// request targeted cache invalidation from background `.task` work. Mutable
+/// cache state is protected by a lock.
 public final class RenderCache: @unchecked Sendable {
+    /// Lock protecting cached entries, active identities, and statistics.
+    private let lock = NSLock()
 
     /// Aggregated cache performance statistics.
     ///
@@ -140,7 +143,14 @@ public final class RenderCache: @unchecked Sendable {
     private var activeIdentities: Set<ViewIdentity> = []
 
     /// Cumulative cache performance statistics.
-    public private(set) var stats = Stats()
+    private var currentStats = Stats()
+
+    /// Snapshot of cumulative cache performance statistics.
+    public var stats: Stats {
+        lock.lock()
+        defer { lock.unlock() }
+        return currentStats
+    }
 
     /// Stats snapshot taken at the start of each render pass (for per-frame deltas).
     private var statsAtFrameStart = Stats()
@@ -157,10 +167,18 @@ public final class RenderCache: @unchecked Sendable {
     public init() {}
 
     /// The number of cached entries (for testing/debugging).
-    public var count: Int { entries.count }
+    public var count: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return entries.count
+    }
 
     /// Whether the cache is empty.
-    public var isEmpty: Bool { entries.isEmpty }
+    public var isEmpty: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return entries.isEmpty
+    }
 }
 
 // MARK: - Internal API
@@ -184,30 +202,37 @@ extension RenderCache {
         contextWidth: Int,
         contextHeight: Int
     ) -> FrameBuffer? {
+        lock.lock()
         guard let entry = entries[identity] else {
-            stats.misses += 1
+            currentStats.misses += 1
+            lock.unlock()
             logDebug("MISS (no entry) \(identity.path)")
             return nil
         }
         guard let oldView = entry.viewSnapshot as? V else {
-            stats.misses += 1
+            currentStats.misses += 1
+            lock.unlock()
             logDebug("MISS (type mismatch) \(identity.path)")
             return nil
         }
         guard entry.contextWidth == contextWidth,
               entry.contextHeight == contextHeight else {
-            stats.misses += 1
+            currentStats.misses += 1
+            lock.unlock()
             logDebug("MISS (size changed) \(identity.path)")
             return nil
         }
         guard oldView == view else {
-            stats.misses += 1
+            currentStats.misses += 1
+            lock.unlock()
             logDebug("MISS (view changed) \(identity.path)")
             return nil
         }
-        stats.hits += 1
+        currentStats.hits += 1
+        let buffer = entry.buffer
+        lock.unlock()
         logDebug("HIT \(identity.path)")
-        return entry.buffer
+        return buffer
     }
 
     /// Stores a rendered buffer for a view identity.
@@ -227,13 +252,15 @@ extension RenderCache {
         contextWidth: Int,
         contextHeight: Int
     ) {
-        stats.stores += 1
+        lock.lock()
+        currentStats.stores += 1
         entries[identity] = CacheEntry(
             viewSnapshot: view,
             buffer: buffer,
             contextWidth: contextWidth,
             contextHeight: contextHeight
         )
+        lock.unlock()
         logDebug("STORE \(identity.path)")
     }
 
@@ -244,14 +271,18 @@ extension RenderCache {
     ///
     /// - Parameter identity: The view identity to mark as active.
     public func markActive(_ identity: ViewIdentity) {
+        lock.lock()
         activeIdentities.insert(identity)
+        lock.unlock()
     }
 
     /// Begins a new render pass by clearing the active identity set
     /// and snapshotting the current stats for per-frame delta calculation.
     public func beginRenderPass() {
+        lock.lock()
         activeIdentities.removeAll(keepingCapacity: true)
-        statsAtFrameStart = stats
+        statsAtFrameStart = currentStats
+        lock.unlock()
     }
 
     /// Removes cache entries for views no longer in the tree.
@@ -259,10 +290,12 @@ extension RenderCache {
     /// Any entry whose identity was not marked active during this render pass
     /// is removed. Prevents memory leaks from permanently removed views.
     public func removeInactive() {
+        lock.lock()
         let staleKeys = entries.keys.filter { !activeIdentities.contains($0) }
         for key in staleKeys {
             entries.removeValue(forKey: key)
         }
+        lock.unlock()
     }
 
     /// Clears all cached entries.
@@ -272,9 +305,12 @@ extension RenderCache {
     /// For state changes that only affect a subtree, prefer
     /// ``clearAffected(by:)``.
     public func clearAll() {
-        stats.clears += 1
-        logDebug("CLEAR ALL (\(entries.count) entries)")
+        lock.lock()
+        currentStats.clears += 1
+        let entryCount = entries.count
         entries.removeAll(keepingCapacity: true)
+        lock.unlock()
+        logDebug("CLEAR ALL (\(entryCount) entries)")
     }
 
     /// Clears cached entries affected by a state change at the given identity.
@@ -285,7 +321,8 @@ extension RenderCache {
     ///
     /// - Parameter identity: The identity of the view whose state changed.
     public func clearAffected(by identity: ViewIdentity) {
-        stats.subtreeClears += 1
+        lock.lock()
+        currentStats.subtreeClears += 1
         let staleKeys = entries.keys.filter { cached in
             cached == identity
                 || cached.isAncestor(of: identity)
@@ -294,20 +331,26 @@ extension RenderCache {
         for key in staleKeys {
             entries.removeValue(forKey: key)
         }
-        logDebug("CLEAR AFFECTED by \(identity.path): \(staleKeys.count) of \(entries.count + staleKeys.count) entries")
+        let totalCount = entries.count + staleKeys.count
+        lock.unlock()
+        logDebug("CLEAR AFFECTED by \(identity.path): \(staleKeys.count) of \(totalCount) entries")
     }
 
     /// Removes all cached entries, resets GC state, and clears statistics.
     public func reset() {
+        lock.lock()
         entries.removeAll()
         activeIdentities.removeAll()
-        stats = Stats()
+        currentStats = Stats()
         statsAtFrameStart = Stats()
+        lock.unlock()
     }
 
     /// Resets the cumulative statistics counters to zero.
     public func resetStats() {
-        stats = Stats()
+        lock.lock()
+        currentStats = Stats()
+        lock.unlock()
     }
 
     /// Logs a per-frame summary to stderr if debug logging is enabled.
@@ -317,7 +360,10 @@ extension RenderCache {
     /// (delta since ``beginRenderPass()``) plus the current entry count.
     public func logFrameStats() {
         guard Self.debugEnabled else { return }
-        let frame = stats.delta(since: statsAtFrameStart)
+        lock.lock()
+        let frame = currentStats.delta(since: statsAtFrameStart)
+        let entryCount = entries.count
+        lock.unlock()
         let rate = frame.lookups > 0
             ? String(format: "%.0f%%", frame.hitRate * 100)
             : "n/a"
@@ -325,7 +371,7 @@ extension RenderCache {
             "FRAME — hits: \(frame.hits), misses: \(frame.misses), "
                 + "stores: \(frame.stores), clears: \(frame.clears), "
                 + "subtreeClears: \(frame.subtreeClears), "
-                + "entries: \(entries.count), hit rate: \(rate)"
+                + "entries: \(entryCount), hit rate: \(rate)"
         )
     }
 }

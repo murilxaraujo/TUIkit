@@ -101,17 +101,18 @@ Objective: make state mutation, rendering, tasks, and shared services safe and p
 
 Tasks:
 
-- [ ] Audit uses of `@unchecked Sendable` and document invariants for each.
-- [ ] Audit uses of `nonisolated(unsafe)` and document why each is safe.
-- [ ] Review `AppState.shared`, `RenderCache.shared`, and `AppStorage.backend` against the “no singletons for state” principle.
-- [ ] Move global/shared services behind environment or explicit lifecycle ownership where possible.
+- [x] Audit uses of `@unchecked Sendable` and document invariants for each. See [Concurrency and Shared-State Audit](ConcurrencyAndStateAudit.md).
+- [x] Audit uses of `nonisolated(unsafe)` and document why each is safe. See [Concurrency and Shared-State Audit](ConcurrencyAndStateAudit.md).
+- [x] Review `AppState.shared`, `RenderCache.shared`, and `AppStorage.backend` against the “no singletons for state” principle. See [Concurrency and Shared-State Audit](ConcurrencyAndStateAudit.md).
+- [x] Move first runtime services toward explicit lifecycle/concurrency ownership: `.task` work now runs detached from the interaction loop, timers use structured concurrency, and `StateStorage`/`StateBox`/`RenderCache` are locked for background result publication.
+- [ ] Move remaining global/shared services behind environment or explicit lifecycle ownership where possible. `RenderCache.shared`, `StorageDefaults.backend`, and `NotificationService.current` are the highest-priority follow-ups.
 - [ ] Add stress tests for rapid state changes, focus changes, timers, and render invalidation.
 - [ ] Add lifecycle tests for `.task()`, cancellation, disappearance, and shutdown cleanup.
 - [ ] Review signal handling for async-signal-safety and minimal side effects.
 
 Acceptance criteria:
 
-- [ ] Every unsafe concurrency annotation has a written invariant.
+- [x] Every unsafe concurrency annotation has a written invariant.
 - [ ] Long-running app scenarios do not leak tasks or stale state.
 - [ ] Global mutable state is removed, isolated, or explicitly justified.
 
@@ -262,7 +263,7 @@ Exit criteria:
 
 ### Milestone 2: Runtime hardening
 
-- [ ] Concurrency and shared state audit complete.
+- [x] Concurrency and shared state audit complete.
 - [ ] Terminal compatibility matrix started.
 - [ ] Raw mode and alternate-screen cleanup validated.
 - [ ] Resize, focus, and lifecycle stress tests added.
@@ -300,8 +301,9 @@ Recommended starting order:
 
 1. Create backlog issues from this document.
 2. Continue terminal compatibility smoke validation using [Terminal Compatibility Matrix](TerminalCompatibility.md).
-3. Start the concurrency/shared-state audit.
-4. Verify SwiftUI-equivalent API parity and document deviations.
+3. Implement the remaining `RenderCache.shared` per-context ownership follow-up from the concurrency audit.
+4. Continue actor-isolating runtime-owned managers with `TUIRuntimeActor` where APIs can become async-safe.
+5. Verify SwiftUI-equivalent API parity and document deviations.
 5. Expand focus/keyboard UX documentation and tests.
 6. Build out a realistic dogfood flow in the example app.
 

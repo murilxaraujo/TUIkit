@@ -4,6 +4,7 @@
 //  Created by LAYERED.work
 //  License: MIT
 
+import Foundation
 import Testing
 
 @testable import TUIkit
@@ -45,5 +46,32 @@ struct PulseTimerTests {
         timer.start()
         timer.start()
         timer.stop()
+    }
+
+    @Test("Timer ticks request render from background task")
+    func timerTicksRequestRender() async throws {
+        let appState = AppState()
+        let timer = PulseTimer(renderNotifier: appState)
+
+        timer.start()
+        try await Task.sleep(for: .milliseconds(130))
+        timer.stop()
+
+        #expect(appState.needsRender == true)
+    }
+
+    @Test("Stop cancels structured timer task")
+    func stopCancelsStructuredTimerTask() async throws {
+        let appState = AppState()
+        let timer = PulseTimer(renderNotifier: appState)
+
+        timer.start()
+        timer.stop()
+        appState.didRender()
+
+        try await Task.sleep(for: .milliseconds(130))
+
+        #expect(appState.needsRender == false)
+        #expect(timer.phase == 0)
     }
 }

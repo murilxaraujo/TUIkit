@@ -5,6 +5,10 @@
 //  License: MIT  render pass management, and async task lifecycle.
 //
 
+#if canImport(Darwin)
+    import Darwin
+#endif
+import Foundation
 import Testing
 
 @testable import TUIkit
@@ -204,36 +208,46 @@ struct LifecycleManagerTaskTests {
     @Test("startTask creates a task")
     func startTask() async throws {
         let manager = LifecycleManager()
-        nonisolated(unsafe) var executed = false
+        let probe = TaskExecutionProbe()
         manager.startTask(token: "task-1", priority: .medium) {
-            executed = true
+            probe.markExecuted()
         }
         try await Task.sleep(for: .milliseconds(50))
-        #expect(executed == true)
+        #expect(probe.executed == true)
     }
 
-    @Test("cancelTask sets cancellation flag")
+    @Test("startTask runs detached from the main thread")
+    func startTaskRunsDetachedFromMainThread() async throws {
+        let manager = LifecycleManager()
+        let probe = TaskExecutionProbe()
+
+        manager.startTask(token: "task-1", priority: .medium) {
+            probe.markThread(isMainThread: isCurrentThreadMain())
+        }
+
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(probe.executed == true)
+        #expect(probe.ranOnMainThread == false)
+    }
+
+    @Test("cancelTask cancels without crashing")
     func cancelTask() async throws {
         let manager = LifecycleManager()
-        nonisolated(unsafe) var wasCancelled = false
         manager.startTask(token: "task-1", priority: .medium) {
-            // Long-running task that checks cancellation
             try? await Task.sleep(for: .seconds(10))
-            wasCancelled = Task.isCancelled
         }
-        // Cancel immediately
+        // Cancel immediately. This verifies cancellation is requested and the
+        // lifecycle manager remains usable.
         manager.cancelTask(token: "task-1")
         try await Task.sleep(for: .milliseconds(50))
-        // Task was cancelled, so it either didn't complete the sleep
-        // or Task.isCancelled was true. Either way the task is cancelled.
-        // We can't easily observe the internal state, but cancellation was requested.
-        // This verifies cancelTask doesn't crash and processes correctly.
+        manager.startTask(token: "task-1", priority: .medium) {}
+        manager.cancelTask(token: "task-1")
     }
 
     @Test("startTask replaces existing task for same token")
     func replaceTask() async throws {
         let manager = LifecycleManager()
-        nonisolated(unsafe) var secondExecuted = false
+        let probe = TaskExecutionProbe()
 
         manager.startTask(token: "task-1", priority: .medium) {
             // Long-running first task
@@ -241,10 +255,10 @@ struct LifecycleManagerTaskTests {
         }
         // Replace immediately with short task
         manager.startTask(token: "task-1", priority: .medium) {
-            secondExecuted = true
+            probe.markExecuted()
         }
         try await Task.sleep(for: .milliseconds(50))
-        #expect(secondExecuted == true)
+        #expect(probe.executed == true)
     }
 
     @Test("reset does not crash with running tasks")
@@ -260,5 +274,44 @@ struct LifecycleManagerTaskTests {
         manager.reset()
         // Verify clean state
         #expect(manager.hasAppeared(token: "task-1") == false)
+    }
+}
+
+private func isCurrentThreadMain() -> Bool {
+    #if canImport(Darwin)
+        pthread_main_np() != 0
+    #else
+        false
+    #endif
+}
+
+private final class TaskExecutionProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _executed = false
+    private var _ranOnMainThread: Bool?
+
+    var executed: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return _executed
+    }
+
+    var ranOnMainThread: Bool? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _ranOnMainThread
+    }
+
+    func markExecuted() {
+        lock.lock()
+        _executed = true
+        lock.unlock()
+    }
+
+    func markThread(isMainThread: Bool) {
+        lock.lock()
+        _executed = true
+        _ranOnMainThread = isMainThread
+        lock.unlock()
     }
 }

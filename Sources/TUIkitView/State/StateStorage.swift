@@ -4,6 +4,7 @@
 //  Created by LAYERED.work
 //  License: MIT
 
+import Foundation
 import TUIkitCore
 
 // MARK: - State Storage
@@ -25,9 +26,14 @@ import TUIkitCore
 ///
 /// ## Thread Safety
 ///
-/// `StateStorage` is accessed only from the main thread (TUIKit's single-threaded
-/// event loop). No locking is required.
+/// `StateStorage` can be touched by the render loop and by background `.task`
+/// work that publishes results through `@State`/`StateBox`. Mutable storage is
+/// protected by a lock so background jobs do not have to run on the interaction
+/// loop.
 public final class StateStorage: @unchecked Sendable {
+
+    /// Lock protecting persisted values, tracking dictionaries, and render-pass state.
+    private let lock = NSLock()
 
     // MARK: - State Key
 
@@ -72,7 +78,11 @@ public final class StateStorage: @unchecked Sendable {
     public init() {}
 
     /// The number of stored state entries (for testing/debugging).
-    public var count: Int { values.count }
+    public var count: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return values.count
+    }
 }
 
 // MARK: - Internal API
@@ -89,6 +99,8 @@ extension StateStorage {
     ///   - defaultValue: The initial value for newly created storage.
     /// - Returns: The persistent `Storage` object for this property.
     public func storage<Value>(for key: StateKey, default defaultValue: Value) -> StateBox<Value> {
+        lock.lock()
+        defer { lock.unlock() }
         if let existing = values[key] as? StateBox<Value> {
             existing.identity = key.identity
             return existing
@@ -106,7 +118,9 @@ extension StateStorage {
     ///
     /// - Parameter identity: The view identity to mark as active.
     public func markActive(_ identity: ViewIdentity) {
+        lock.lock()
         activeIdentities.insert(identity)
+        lock.unlock()
     }
 
     // MARK: - onChange Tracking
@@ -119,6 +133,8 @@ extension StateStorage {
     /// - Parameter identity: The view identity requesting an index.
     /// - Returns: The next available index (starting at 0).
     public func nextOnChangeIndex(for identity: ViewIdentity) -> Int {
+        lock.lock()
+        defer { lock.unlock() }
         let index = onChangeCounters[identity, default: 0]
         onChangeCounters[identity] = index + 1
         return index
@@ -129,7 +145,9 @@ extension StateStorage {
     /// - Parameter key: The state key (identity + property index).
     /// - Returns: The tracked value, or `nil` if no value was stored yet.
     public func trackedValue<V>(for key: StateKey) -> V? {
-        trackedValues[key] as? V
+        lock.lock()
+        defer { lock.unlock() }
+        return trackedValues[key] as? V
     }
 
     /// Stores a tracked value for change detection across render passes.
@@ -138,15 +156,19 @@ extension StateStorage {
     ///   - value: The value to store.
     ///   - key: The state key (identity + property index).
     public func setTrackedValue<V>(_ value: V, for key: StateKey) {
+        lock.lock()
         trackedValues[key] = value
+        lock.unlock()
     }
 
     // MARK: - Render Pass Lifecycle
 
     /// Begins a new render pass by clearing the active identity set.
     public func beginRenderPass() {
+        lock.lock()
         activeIdentities.removeAll(keepingCapacity: true)
         onChangeCounters.removeAll(keepingCapacity: true)
+        lock.unlock()
     }
 
     /// Ends a render pass by removing state for views no longer in the tree.
@@ -155,6 +177,7 @@ extension StateStorage {
     /// is removed. This prevents memory leaks from views that have been
     /// permanently removed (e.g., by navigation or conditional branches).
     public func endRenderPass() {
+        lock.lock()
         let staleKeys = values.keys.filter { !activeIdentities.contains($0.identity) }
         for key in staleKeys {
             values.removeValue(forKey: key)
@@ -163,6 +186,7 @@ extension StateStorage {
         for key in staleTrackedKeys {
             trackedValues.removeValue(forKey: key)
         }
+        lock.unlock()
     }
 
     /// Removes all state for descendants of the given identity.
@@ -172,6 +196,7 @@ extension StateStorage {
     ///
     /// - Parameter ancestor: The branch identity whose descendants should be removed.
     public func invalidateDescendants(of ancestor: ViewIdentity) {
+        lock.lock()
         let staleKeys = values.keys.filter { ancestor.isAncestor(of: $0.identity) }
         for key in staleKeys {
             values.removeValue(forKey: key)
@@ -180,14 +205,17 @@ extension StateStorage {
         for key in staleTrackedKeys {
             trackedValues.removeValue(forKey: key)
         }
+        lock.unlock()
     }
 
     /// Removes all stored state. Used during app cleanup.
     public func reset() {
+        lock.lock()
         values.removeAll()
         trackedValues.removeAll()
         onChangeCounters.removeAll()
         activeIdentities.removeAll()
+        lock.unlock()
     }
 }
 
@@ -203,15 +231,44 @@ extension StateStorage {
 /// Cache invalidation is identity-aware: only the affected subtree is
 /// cleared instead of the entire cache.
 public final class StateBox<Value>: @unchecked Sendable {
+    /// Lock protecting the stored value and owner identity.
+    private let lock = NSLock()
+
     /// The identity of the view that owns this state property.
     ///
     /// Set during hydration from ``StateStorage``. Used for targeted
     /// cache invalidation via ``RenderCache/clearAffected(by:)``.
-    var identity: ViewIdentity?
+    private var storedIdentity: ViewIdentity?
+
+    var identity: ViewIdentity? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return storedIdentity
+        }
+        set {
+            lock.lock()
+            storedIdentity = newValue
+            lock.unlock()
+        }
+    }
+
+    /// Backing value storage protected by ``lock``.
+    private var storedValue: Value
 
     /// The current value.
     public var value: Value {
-        didSet {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return storedValue
+        }
+        set {
+            lock.lock()
+            storedValue = newValue
+            let identity = storedIdentity
+            lock.unlock()
+
             if let identity {
                 RenderCache.shared.clearAffected(by: identity)
             } else {
@@ -225,6 +282,6 @@ public final class StateBox<Value>: @unchecked Sendable {
     ///
     /// - Parameter value: The initial value.
     public init(_ value: Value) {
-        self.value = value
+        self.storedValue = value
     }
 }
