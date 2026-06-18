@@ -385,7 +385,7 @@ The `RenderCache` is **fully cleared** in two situations:
 
 | Trigger | Mechanism |
 |---------|-----------|
-| Any `@State` change | `StateBox.value.didSet` calls `renderCache.clearAll()` |
+| Any `@State` change | `StateBox.value` invalidates the owning context's render cache |
 | Environment change | `RenderLoop` compares an `EnvironmentSnapshot` (palette ID + appearance ID) each frame and clears on mismatch |
 
 Between these events: for example during Spinner animation frames at 25 FPS: the cache is fully active. Static subtrees are rendered once and reused for every subsequent frame.

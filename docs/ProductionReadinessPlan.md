@@ -13,7 +13,7 @@ A production-ready TUIkit should provide:
 - Strong keyboard-first interaction patterns, focus behavior, and visual feedback.
 - Safe state, rendering, lifecycle, and concurrency behavior.
 - Practical documentation, examples, templates, and testing guidance for real app teams.
-- Repeatable release engineering with tagged versions, changelogs, and compatibility notes.
+- Repeatable release engineering with tagged versions, changelogs, compatibility notes, and a manual release validation checklist.
 
 ## Current baseline
 
@@ -105,15 +105,16 @@ Tasks:
 - [x] Audit uses of `nonisolated(unsafe)` and document why each is safe. See [Concurrency and Shared-State Audit](ConcurrencyAndStateAudit.md).
 - [x] Review `AppState.shared`, `RenderCache.shared`, and `AppStorage.backend` against the “no singletons for state” principle. See [Concurrency and Shared-State Audit](ConcurrencyAndStateAudit.md).
 - [x] Move first runtime services toward explicit lifecycle/concurrency ownership: `.task` work now runs detached from the interaction loop, timers use structured concurrency, and `StateStorage`/`StateBox`/`RenderCache` are locked for background result publication.
-- [ ] Move remaining global/shared services behind environment or explicit lifecycle ownership where possible. `RenderCache.shared`, `StorageDefaults.backend`, and `NotificationService.current` are the highest-priority follow-ups.
-- [ ] Add stress tests for rapid state changes, focus changes, timers, and render invalidation.
-- [ ] Add lifecycle tests for `.task()`, cancellation, disappearance, and shutdown cleanup.
+- [ ] Move remaining global/shared services behind environment or explicit lifecycle ownership where possible. `RenderCache.shared` is no longer the default runtime cache; `StorageDefaults.backend` access is synchronized; `NotificationService.current` is the highest-priority remaining follow-up.
+- [x] Add stress tests for rapid state changes, focus changes, timers, and render invalidation.
+- [x] Surface live example-app render FPS so performance impact can be observed during manual validation.
+- [x] Add lifecycle tests for `.task()`, cancellation, disappearance, and shutdown cleanup.
 - [ ] Review signal handling for async-signal-safety and minimal side effects.
 
 Acceptance criteria:
 
 - [x] Every unsafe concurrency annotation has a written invariant.
-- [ ] Long-running app scenarios do not leak tasks or stale state.
+- [ ] Long-running app scenarios do not leak tasks or stale state. Initial stress coverage now verifies rapid `.task` cancellation and context reset cleanup; broader long-running leak tests remain.
 - [ ] Global mutable state is removed, isolated, or explicitly justified.
 
 ### 4. Terminal reliability and compatibility
@@ -123,6 +124,7 @@ Objective: prove TUIkit behaves well in real terminals.
 Tasks:
 
 - [x] Create a terminal compatibility matrix. See [Terminal Compatibility Matrix](TerminalCompatibility.md).
+- [x] Add a release/manual validation checklist covering example app lifecycle, raw mode cleanup, quit shortcuts, resize, FPS, focus/cursor animations, async responsiveness, and terminal/multiplexer matrix. See [Release Validation Checklist](ReleaseValidationChecklist.md).
 - [ ] Validate macOS Terminal, iTerm2, Ghostty, WezTerm, Alacritty, Kitty, VS Code terminal, tmux, screen, and Linux console where practical.
 - [ ] Test alternate screen enter/exit behavior.
 - [ ] Test raw mode restoration on normal quit, Ctrl-C, thrown errors, and crashes where possible.
@@ -228,7 +230,7 @@ Tasks:
 - [ ] Define supported Swift versions and platform versions.
 - [ ] Prefer tagged releases in installation docs over `branch: "main"` once release flow is ready.
 - [ ] Tie DocC publishing to releases or clearly label docs by version.
-- [ ] Add release checklist with build, test, lint, docs, examples, and compatibility notes.
+- [x] Add release checklist with build, test, lint, example-app lifecycle, terminal cleanup, FPS, and compatibility notes. See [Release Validation Checklist](ReleaseValidationChecklist.md).
 
 Acceptance criteria:
 
@@ -266,7 +268,7 @@ Exit criteria:
 - [x] Concurrency and shared state audit complete.
 - [ ] Terminal compatibility matrix started.
 - [ ] Raw mode and alternate-screen cleanup validated.
-- [ ] Resize, focus, and lifecycle stress tests added.
+- [ ] Resize, focus, and lifecycle stress tests added. Initial lifecycle/concurrency stress tests cover rapid `.task` cancellation and context reset cleanup.
 
 Exit criteria:
 
@@ -300,10 +302,9 @@ Exit criteria:
 Recommended starting order:
 
 1. Create backlog issues from this document.
-2. Continue terminal compatibility smoke validation using [Terminal Compatibility Matrix](TerminalCompatibility.md).
-3. Implement the remaining `RenderCache.shared` per-context ownership follow-up from the concurrency audit.
-4. Continue actor-isolating runtime-owned managers with `TUIRuntimeActor` where APIs can become async-safe.
-5. Verify SwiftUI-equivalent API parity and document deviations.
+2. Continue terminal compatibility smoke validation using [Terminal Compatibility Matrix](TerminalCompatibility.md) and [Release Validation Checklist](ReleaseValidationChecklist.md).
+3. Continue actor-isolating runtime-owned managers with `TUIRuntimeActor` where APIs can become async-safe.
+4. Verify SwiftUI-equivalent API parity and document deviations.
 5. Expand focus/keyboard UX documentation and tests.
 6. Build out a realistic dogfood flow in the example app.
 
@@ -320,6 +321,7 @@ swift package --allow-writing-to-directory docc-output \
   --target TUIkit \
   --output-path docc-output \
   --transform-for-static-hosting
+./scripts/release-validation-checklist.sh
 ```
 
 Run Linux validation before major production-readiness claims:

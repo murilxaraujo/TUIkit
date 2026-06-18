@@ -26,7 +26,7 @@ Before shipping an app, validate at least:
 - terminal resize behavior;
 - color and Unicode behavior for your content.
 
-Tracked in [Terminal Compatibility Matrix](TerminalCompatibility.md).
+Tracked in [Terminal Compatibility Matrix](TerminalCompatibility.md). Use the [Release Validation Checklist](ReleaseValidationChecklist.md) before making release or production-readiness claims.
 
 ## Raw mode and alternate-screen failure modes need more proof
 
@@ -96,13 +96,14 @@ The project has not yet documented a production policy for bracketed paste. Text
 
 ## Performance baselines are not yet recorded
 
-TUIkit includes render caching and lazy containers, but formal production performance baselines are still pending.
+TUIkit includes render caching, lazy containers, and a live example-app FPS header for manual observation, but formal production performance baselines are still pending.
 
 Before shipping large-data apps, validate:
 
 - large lists and tables;
 - rapid keyboard input;
 - frequent state updates;
+- whether the example-app FPS header remains live during interaction, resize, and async work;
 - long-running sessions;
 - memory growth over time.
 

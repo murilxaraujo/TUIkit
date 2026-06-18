@@ -182,6 +182,7 @@ extension RenderLoop {
     ///     Passed from `PulseTimer` via `AppRunner`.
     ///   - cursorTimer: The cursor timer for TextField/SecureField animations.
     func render(pulsePhase: Double = 0, cursorTimer: CursorTimer? = nil) {
+        let renderPerformance = tuiContext.renderPerformanceMonitor.recordFrame()
         beginRenderPass()
 
         // If an @Published property changed, clear the entire render cache
@@ -200,6 +201,7 @@ extension RenderLoop {
         var environment = buildEnvironment()
         environment.pulsePhase = pulsePhase
         environment.cursorTimer = cursorTimer
+        environment.renderPerformance = renderPerformance
 
         let scene = evaluateAppBody(environment: environment)
         if let paletteOverrideScene = scene as? any RootPaletteOverrideProvidingScene,

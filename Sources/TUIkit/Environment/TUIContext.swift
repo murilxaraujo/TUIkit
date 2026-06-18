@@ -224,15 +224,21 @@ final class TUIContext: @unchecked Sendable {
     /// for removed views are garbage-collected at the end of each render pass.
     let renderCache: RenderCache
 
+    /// Per-context render cadence monitor for diagnostics.
+    let renderPerformanceMonitor: RenderPerformanceMonitor
+
     /// Creates a new TUI context with fresh instances of all services.
     ///
-    /// Uses the shared `RenderCache` singleton for all instances.
+    /// Each context owns its own render cache so app sessions and tests do not
+    /// share memoized subtree state.
     init() {
+        let renderCache = RenderCache()
         self.lifecycle = LifecycleManager()
         self.keyEventDispatcher = KeyEventDispatcher()
         self.preferences = PreferenceStorage()
-        self.stateStorage = StateStorage()
-        self.renderCache = RenderCache.shared
+        self.renderCache = renderCache
+        self.renderPerformanceMonitor = RenderPerformanceMonitor()
+        self.stateStorage = StateStorage(renderCache: renderCache)
     }
 
     /// Creates a new TUI context with the given services.
@@ -243,20 +249,23 @@ final class TUIContext: @unchecked Sendable {
     ///   - lifecycle: The lifecycle manager to use.
     ///   - keyEventDispatcher: The key event dispatcher to use.
     ///   - preferences: The preference storage to use.
-    ///   - stateStorage: The state storage to use.
-    ///   - renderCache: The render cache to use (defaults to the shared singleton).
+    ///   - stateStorage: The state storage to use. When omitted, a storage
+    ///     instance is created and connected to `renderCache`.
+    ///   - renderCache: The render cache to use. Defaults to a fresh per-context cache.
     init(
         lifecycle: LifecycleManager,
         keyEventDispatcher: KeyEventDispatcher,
         preferences: PreferenceStorage,
-        stateStorage: StateStorage = StateStorage(),
-        renderCache: RenderCache = RenderCache.shared
+        stateStorage: StateStorage? = nil,
+        renderCache: RenderCache = RenderCache(),
+        renderPerformanceMonitor: RenderPerformanceMonitor = RenderPerformanceMonitor()
     ) {
         self.lifecycle = lifecycle
         self.keyEventDispatcher = keyEventDispatcher
         self.preferences = preferences
-        self.stateStorage = stateStorage
         self.renderCache = renderCache
+        self.renderPerformanceMonitor = renderPerformanceMonitor
+        self.stateStorage = stateStorage ?? StateStorage(renderCache: renderCache)
     }
 }
 
@@ -270,5 +279,6 @@ extension TUIContext {
         preferences.reset()
         stateStorage.reset()
         renderCache.reset()
+        renderPerformanceMonitor.reset()
     }
 }
