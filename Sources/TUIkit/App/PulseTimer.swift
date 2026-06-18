@@ -12,9 +12,9 @@ import Foundation
 /// using a sine curve. On each step, it calls `setNeedsRender()` to
 /// trigger a re-render with the updated phase.
 ///
-/// The timer runs on its own `DispatchSourceTimer`, completely independent
-/// from the Spinner animation (which uses Swift Concurrency tasks) and
-/// the RenderLoop (which renders on demand via `AppState.needsRender`).
+/// The timer runs in a structured Swift concurrency task. The task sleeps in
+/// the background and only performs the tiny tick mutation/render invalidation
+/// needed to keep the terminal interaction loop responsive.
 ///
 /// ## Breathing Cycle
 ///
@@ -31,7 +31,7 @@ import Foundation
 /// // ... later
 /// pulse.stop()
 /// ```
-final class PulseTimer {
+final class PulseTimer: @unchecked Sendable {
     /// The number of discrete steps in a half-cycle (dim → bright).
     ///
     /// A full breathing cycle (dim → bright → dim) is `totalHalfSteps * 2` steps.
@@ -41,11 +41,14 @@ final class PulseTimer {
     /// The interval between steps in milliseconds.
     private let stepIntervalMs = 100
 
+    /// Lock protecting timer state shared between the main loop and timer queue.
+    private let lock = NSLock()
+
     /// The current step in the full cycle (0 ..< totalHalfSteps * 2).
     private var currentStep = 0
 
-    /// The GCD timer source.
-    private var timer: DispatchSourceTimer?
+    /// The structured concurrency task that drives ticks.
+    private var task: Task<Void, Never>?
 
     /// The render notifier to trigger re-renders.
     private weak var renderNotifier: AppState?
@@ -57,10 +60,10 @@ final class PulseTimer {
     /// - Step totalHalfSteps: phase = 1 (brightest)
     /// - Step totalHalfSteps * 2: phase = 0 (dimmest, cycle repeats)
     var phase: Double {
-        let fullCycle = totalHalfSteps * 2
-        let normalized = Double(currentStep) / Double(fullCycle)
-        // sin(0) = 0, sin(π) = 0, peak at sin(π/2) = 1
-        return sin(normalized * .pi)
+        lock.lock()
+        let step = currentStep
+        lock.unlock()
+        return phase(forStep: step)
     }
 
     /// Creates a new pulse timer.
@@ -83,27 +86,44 @@ extension PulseTimer {
     ///
     /// If the timer is already running, this is a no-op.
     func start() {
-        guard timer == nil else { return }
-
-        let source = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
-        let interval = DispatchTimeInterval.milliseconds(stepIntervalMs)
-        source.schedule(deadline: .now() + interval, repeating: interval)
-
-        source.setEventHandler { [weak self] in
-            guard let self else { return }
-            self.currentStep = (self.currentStep + 1) % (self.totalHalfSteps * 2)
-            self.renderNotifier?.setNeedsRender()
+        lock.lock()
+        guard task == nil else {
+            lock.unlock()
+            return
         }
 
-        source.resume()
-        timer = source
+        let interval = stepIntervalMs
+        let task = Task.detached(priority: .utility) { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .milliseconds(interval))
+                } catch {
+                    break
+                }
+
+                guard let self, !Task.isCancelled else { break }
+                self.tick()
+            }
+        }
+        self.task = task
+        lock.unlock()
     }
 
     /// Stops the breathing animation.
     func stop() {
-        timer?.cancel()
-        timer = nil
+        lock.lock()
+        task?.cancel()
+        task = nil
         currentStep = 0
+        lock.unlock()
+    }
+
+    private func tick() {
+        lock.lock()
+        currentStep = (currentStep + 1) % (totalHalfSteps * 2)
+        let notifier = renderNotifier
+        lock.unlock()
+        notifier?.setNeedsRender()
     }
 
     /// Resets the animation to the brightest point (phase = 1).
@@ -112,6 +132,15 @@ extension PulseTimer {
     /// on the newly focused element instead of continuing mid-cycle.
     func reset() {
         // Set to peak brightness (step = totalHalfSteps → phase = 1.0)
+        lock.lock()
         currentStep = totalHalfSteps
+        lock.unlock()
+    }
+
+    private func phase(forStep step: Int) -> Double {
+        let fullCycle = totalHalfSteps * 2
+        let normalized = Double(step) / Double(fullCycle)
+        // sin(0) = 0, sin(π) = 0, peak at sin(π/2) = 1
+        return sin(normalized * .pi)
     }
 }

@@ -129,7 +129,10 @@ extension LifecycleManager {
 
     /// Starts an async task associated with a lifecycle token.
     ///
-    /// If a task already exists for the token, it is cancelled first.
+    /// If a task already exists for the token, it is cancelled first. Tasks are
+    /// detached so expensive `.task` work does not inherit the runtime/main actor
+    /// and cannot freeze input handling or rendering. Publish results back via
+    /// thread-safe state, bindings, observable models, or an explicit actor hop.
     ///
     /// - Parameters:
     ///   - token: Unique identifier for the view.
@@ -142,9 +145,7 @@ extension LifecycleManager {
     ) {
         lock.lock()
         tasks[token]?.cancel()
-        tasks[token] = Task(priority: priority) {
-            await operation()
-        }
+        tasks[token] = TUIRuntime.runInBackground(priority: priority, operation: operation)
         lock.unlock()
     }
 
