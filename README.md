@@ -145,7 +145,7 @@ Add TUIkit to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/phranck/TUIkit.git", branch: "main")
+    .package(url: "https://github.com/phranck/TUIkit.git", exact: "0.6.0")
 ]
 ```
 
@@ -255,6 +255,19 @@ Tests/
 - All 1172 tests run in parallel
 - The `Terminal` class handles raw mode and cursor control via POSIX `termios`
 - See [Known Limitations](docs/KnownLimitations.md) and [Terminal Compatibility](docs/TerminalCompatibility.md) when validating real terminal behavior.
+
+## Production-readiness guides
+
+- [Build a Real App tutorial](docs/BuildARealAppTutorial.md)
+- [Testing Guide](docs/TestingGuide.md)
+- [Custom Component Guide](docs/CustomComponentGuide.md)
+- [Theming and Style Guide](docs/ThemingAndStyleGuide.md)
+- [Keyboard and Focus Guide](docs/KeyboardFocusGuide.md)
+- [Performance Guide](docs/PerformanceGuide.md)
+- [Troubleshooting](docs/Troubleshooting.md)
+- [Supported Platforms](docs/SupportedPlatforms.md)
+- [Terminal Input Policy](docs/TerminalInputPolicy.md)
+- [Release Process](docs/ReleaseProcess.md)
 
 ## License
 

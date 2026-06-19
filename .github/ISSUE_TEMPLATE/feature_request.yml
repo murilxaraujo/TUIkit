@@ -1,0 +1,28 @@
+name: Feature request
+description: Propose a TUIkit capability or API improvement
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What app or framework need does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Include API sketches or terminal UX examples when useful.
+    validations:
+      required: true
+  - type: textarea
+    id: parity
+    attributes:
+      label: SwiftUI parity / terminal constraints
+      description: If there is a SwiftUI equivalent, describe how this should match or intentionally differ.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

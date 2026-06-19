@@ -12,14 +12,10 @@
 ///
 /// ## Rendering
 ///
-/// `ForEach` has **no standalone rendering capability**. It declares
-/// `body: Never` but does *not* conform to `Renderable`. On its own,
-/// it would produce an empty ``FrameBuffer``.
-///
-/// In practice, `ForEach` is always used inside a `@ViewBuilder` block
-/// (e.g. within `VStack` or `HStack`). The builder's `buildArray`
-/// method flattens it into a ``ViewArray``, which *is* `Renderable`.
-/// This is the same pattern SwiftUI uses.
+/// `ForEach` renders each generated child in collection order. This preserves
+/// SwiftUI-style usage in stacks, panels, custom containers, and other
+/// `@ViewBuilder` contexts without requiring callers to replace `ForEach` with
+/// a `for` loop.
 ///
 /// # Example with Identifiable
 ///
@@ -75,13 +71,27 @@ public struct ForEach<Data: RandomAccessCollection, ID: Hashable, Content: View>
         self.content = content
     }
 
-    /// Never called — `ForEach` is flattened into a ``ViewArray`` by
-    /// `@ViewBuilder.buildArray` before rendering occurs.
-    ///
-    /// - Important: Accessing this property directly will crash at runtime.
-    ///   Always use `ForEach` inside a `@ViewBuilder` closure (e.g., `VStack`, `HStack`).
+    /// Never called — `ForEach` renders directly via ``Renderable``.
     public var body: Never {
-        fatalError("ForEach has no standalone rendering; use inside a @ViewBuilder block")
+        fatalError("ForEach renders via Renderable")
+    }
+}
+
+// MARK: - Rendering
+
+extension ForEach: Renderable, ChildInfoProvider {
+    public func renderToBuffer(context: RenderContext) -> FrameBuffer {
+        FrameBuffer(verticallyStacking: childInfos(context: context).compactMap(\.buffer))
+    }
+
+    public func childInfos(context: RenderContext) -> [ChildInfo] {
+        data.enumerated().map { index, element in
+            let view = content(element)
+            return makeChildInfo(
+                for: view,
+                context: context.withChildIdentity(type: type(of: view), index: index)
+            )
+        }
     }
 }
 

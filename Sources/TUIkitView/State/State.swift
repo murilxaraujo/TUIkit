@@ -230,6 +230,7 @@ public enum StateRegistration {
 ///     }
 /// }
 /// ```
+@dynamicMemberLookup
 @propertyWrapper
 public struct Binding<Value> {
     /// The getter for the value.
@@ -265,6 +266,21 @@ public struct Binding<Value> {
     /// - Returns: A binding that always returns the given value.
     public static func constant(_ value: Value) -> Binding<Value> {
         Self(get: { value }, set: { _ in })
+    }
+
+    /// Creates a binding to a writable property of this binding's value.
+    ///
+    /// This mirrors SwiftUI's dynamic member projection, allowing code like
+    /// `$model.title` when `model` is held in `@State`.
+    public subscript<Subject>(dynamicMember keyPath: WritableKeyPath<Value, Subject>) -> Binding<Subject> {
+        Binding<Subject>(
+            get: { self.wrappedValue[keyPath: keyPath] },
+            set: { newValue in
+                var value = self.wrappedValue
+                value[keyPath: keyPath] = newValue
+                self.wrappedValue = value
+            }
+        )
     }
 }
 

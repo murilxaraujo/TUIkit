@@ -71,7 +71,48 @@ extension FlexibleFrameView: @preconcurrency Equatable where Content: Equatable 
 
 // MARK: - Renderable
 
-extension FlexibleFrameView: Renderable {
+extension FlexibleFrameView: Renderable, Layoutable {
+    func sizeThatFits(proposal: ProposedSize, context: RenderContext) -> ViewSize {
+        var contentProposal = proposal
+        if let width = idealWidth ?? minWidth {
+            contentProposal.width = width
+        }
+        if let height = idealHeight ?? minHeight {
+            contentProposal.height = height
+        }
+
+        let contentSize = measureChild(content, proposal: contentProposal, context: context)
+
+        var width = contentSize.width
+        var height = isInfinite(maxHeight) ? 1 : contentSize.height
+
+        if let minimumWidth = minWidth {
+            width = max(width, minimumWidth)
+        }
+        if let minimumHeight = minHeight {
+            height = max(height, minimumHeight)
+        }
+        if let idealWidth {
+            width = max(width, idealWidth)
+        }
+        if let idealHeight {
+            height = max(height, idealHeight)
+        }
+        if let maximumWidth = maxWidth, case .fixed(let value) = maximumWidth {
+            width = min(width, value)
+        }
+        if let maximumHeight = maxHeight, case .fixed(let value) = maximumHeight {
+            height = min(height, value)
+        }
+
+        return ViewSize(
+            width: width,
+            height: height,
+            isWidthFlexible: isInfinite(maxWidth) || contentSize.isWidthFlexible,
+            isHeightFlexible: isInfinite(maxHeight) || contentSize.isHeightFlexible
+        )
+    }
+
     func renderToBuffer(context: RenderContext) -> FrameBuffer {
         // Calculate the target width based on constraints
         let targetWidth: Int
@@ -145,6 +186,12 @@ extension FlexibleFrameView: Renderable {
 
         // Otherwise, align content within the frame
         return alignBuffer(buffer, toWidth: finalWidth, height: finalHeight)
+    }
+
+    private func isInfinite(_ dimension: FrameDimension?) -> Bool {
+        guard let dimension else { return false }
+        if case .infinity = dimension { return true }
+        return false
     }
 
     /// Aligns buffer content within the target frame size.

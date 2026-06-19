@@ -16,6 +16,10 @@ TUIkit is currently pre-1.0. Breaking changes may occur before a stable release,
 - Added `docs/ConcurrencyAndStateAudit.md` to document unsafe concurrency invariants, global/shared state risks, and runtime-hardening follow-ups.
 - Added render invalidation stress tests covering rapid state changes, focus changes, and pulse/cursor timer render requests against context-owned render caches.
 - Added `scripts/dump-public-api.sh` to regenerate the public API inventory from source.
+- Added production-readiness guides for building a real app, testing, custom components, theming/style, keyboard/focus UX, performance, troubleshooting, supported platforms, SwiftUI parity, and terminal input policy.
+- Added GitHub issue templates for bugs, feature requests, and terminal compatibility reports.
+- Added `docs/ReleaseProcess.md` to define RC/release validation, documentation generation, and tagging gates.
+- Added `SECURITY.md` for vulnerability reporting scope and supported-version expectations.
 
 ### Changed
 
@@ -29,6 +33,10 @@ TUIkit is currently pre-1.0. Breaking changes may occur before a stable release,
 - Added per-context render performance snapshots and surfaced live FPS in the example app header next to OS/architecture info.
 - Made `StorageDefaults.backend` a synchronized process default while preserving source-compatible get/set access and existing `@AppStorage` backend capture behavior.
 - Added lifecycle/concurrency stress coverage for rapid `.task` appear/disappear cancellation and `TUIContext.reset()` task cleanup.
+- Added a production-style dogfood workflow page to the example app covering list navigation, forms, validation state, actions, and contextual status hints.
+- Expanded the Makefile with build, test, lint, documentation, and release-checklist targets.
+- Updated installation guidance to prefer a tagged release over depending on `main`.
+- Updated the project template to generate an app with explicit route state, stable focus IDs, status bar hints, Swift 6.0, and macOS 14 alignment.
 
 ### Deprecated
 

@@ -48,4 +48,17 @@ struct StatePropertyWrapperTests {
         binding.wrappedValue = 77
         #expect(state.wrappedValue == 77)
     }
+
+    @Test("Binding supports dynamic member projection")
+    func bindingDynamicMemberProjection() {
+        struct Model: Equatable {
+            var input: String = ""
+        }
+
+        let state = State(wrappedValue: Model())
+        let inputBinding = state.projectedValue.input
+        inputBinding.wrappedValue = "Hello"
+
+        #expect(state.wrappedValue.input == "Hello")
+    }
 }

@@ -291,7 +291,7 @@ extension ContainerView where Footer == EmptyView {
 /// This private struct contains all the complex rendering logic, allowing
 /// ContainerView to have a proper `body: some View` that enables modifiers
 /// to work correctly.
-private struct _ContainerViewCore<Content: View, Footer: View>: View, Renderable {
+private struct _ContainerViewCore<Content: View, Footer: View>: View, Renderable, Layoutable {
     /// The container title (rendered in border or header section).
     let title: String?
 
@@ -314,6 +314,39 @@ private struct _ContainerViewCore<Content: View, Footer: View>: View, Renderable
         fatalError("_ContainerViewCore renders via Renderable")
     }
 
+    func sizeThatFits(proposal: ProposedSize, context: RenderContext) -> ViewSize {
+        let horizontalOverhead = 2 + padding.leading + padding.trailing
+        let verticalOverhead = 2 + padding.top + padding.bottom
+
+        let contentProposal = ProposedSize(
+            width: proposal.width.map { max(0, $0 - horizontalOverhead) },
+            height: proposal.height.map { max(0, $0 - verticalOverhead) }
+        )
+        let contentSize = measureChild(content, proposal: contentProposal, context: context)
+
+        let footerSize: ViewSize
+        if let footer {
+            footerSize = measureChild(footer, proposal: ProposedSize(width: proposal.width.map { max(0, $0 - 4) }, height: nil), context: context)
+        } else {
+            footerSize = .fixed(0, 0)
+        }
+
+        let titleWidth = title.map { $0.count + 4 } ?? 0
+        let contentWidth = contentSize.width + padding.leading + padding.trailing
+        let footerWidth = footer == nil ? 0 : footerSize.width + 2
+        let width = max(titleWidth, contentWidth, footerWidth) + 2
+
+        let footerHeight = footer == nil ? 0 : footerSize.height + (style.showFooterSeparator ? 1 : 0)
+        let height = contentSize.height + padding.top + padding.bottom + footerHeight + 2
+
+        return ViewSize(
+            width: width,
+            height: height,
+            isWidthFlexible: contentSize.isWidthFlexible || footerSize.isWidthFlexible,
+            isHeightFlexible: contentSize.isHeightFlexible || footerSize.isHeightFlexible
+        )
+    }
+
     func renderToBuffer(context: RenderContext) -> FrameBuffer {
         let appearance = context.environment.appearance
         let effectiveBorderStyle = style.borderStyle ?? appearance.borderStyle
@@ -323,6 +356,11 @@ private struct _ContainerViewCore<Content: View, Footer: View>: View, Renderable
         // Create inner context for content inside borders using shared helper.
         // Padding width reduction is handled by PaddingModifier.adjustContext.
         var innerContext = context.forBorderedContent()
+        // Reserve vertical space for the top and bottom borders. Without this,
+        // flexible children such as ScrollView can consume the container's full
+        // allocated height, pushing the bottom border outside the parent stack's
+        // allocation.
+        innerContext.availableHeight = max(0, context.availableHeight - 2)
 
         // Consume focus indicator so nested containers don't also show it.
         let indicatorColor = context.environment.focusIndicatorColor

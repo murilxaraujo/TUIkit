@@ -412,7 +412,7 @@ PROJECT_NAME="$PROJECT_BASE"
 echo -e "${GREEN}Creating Package.swift...${NC}"
 
 # Build dependencies array
-DEPENDENCIES="        .package(url: \"https://github.com/phranck/TUIkit.git\", branch: \"main\")"
+DEPENDENCIES="        .package(url: \"https://github.com/phranck/TUIkit.git\", exact: \"0.6.0\")"
 if [ "$INCLUDE_SQLITE" = true ]; then
     DEPENDENCIES="${DEPENDENCIES},
         .package(url: \"https://github.com/groue/GRDB.swift.git\", from: \"7.0.0\")"
@@ -449,7 +449,7 @@ import PackageDescription
 
 let package = Package(
     name: "${PROJECT_NAME}",
-    platforms: [.macOS(.v15)],
+    platforms: [.macOS(.v14)],
     dependencies: [
 ${DEPENDENCIES}
     ],
@@ -479,17 +479,51 @@ EOF
 cat > Sources/ContentView.swift << 'EOF'
 import TUIkit
 
+private enum Route: Equatable {
+    case home
+    case settings
+}
+
 struct ContentView: View {
+    @State private var route: Route = .home
+    @State private var username = ""
+    @State private var notificationsEnabled = true
+
     var body: some View {
-        VStack {
-            Text("Hello, TUIkit!")
+        VStack(alignment: .leading, spacing: 1) {
+            Text("My TUIkit App")
                 .foregroundStyle(.palette.accent)
                 .bold()
 
-            Text("Welcome to your new terminal app")
-                .foregroundStyle(.palette.foregroundSecondary)
+            switch route {
+            case .home:
+                Text("Welcome to your new terminal app")
+                    .foregroundStyle(.palette.foregroundSecondary)
+                Button("Open Settings", style: .primary) {
+                    route = .settings
+                }
+                .focusID("home.settings")
+            case .settings:
+                Text("Settings").bold()
+                HStack(spacing: 1) {
+                    Text("Name:").foregroundStyle(.palette.foregroundSecondary)
+                    TextField("Username", text: $username, prompt: Text("Your name"))
+                        .focusID("settings.username")
+                }
+                Toggle("Notifications", isOn: $notificationsEnabled)
+                    .focusID("settings.notifications")
+                Button("Done", style: .primary) {
+                    route = .home
+                }
+                .focusID("settings.done")
+            }
         }
         .padding()
+        .statusBarItems {
+            StatusBarItem(shortcut: Shortcut.tab, label: "next")
+            StatusBarItem(shortcut: Shortcut.enter, label: "activate")
+            StatusBarItem(shortcut: Shortcut.escape, label: "back")
+        }
     }
 }
 EOF

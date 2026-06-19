@@ -100,6 +100,42 @@ struct FocusManagerTests {
         #expect(manager.currentFocused == nil)
     }
 
+    @Test("End render pass drops focus when focused element becomes disabled")
+    func endRenderPassDropsDisabledFocus() {
+        let manager = FocusManager()
+
+        let textInput = MockFocusable(id: "prompt")
+        manager.register(textInput)
+        #expect(manager.currentFocusedID == "prompt")
+
+        textInput.canBeFocused = false
+        manager.beginRenderPass()
+        manager.register(textInput)
+        manager.endRenderPass()
+
+        #expect(manager.currentFocusedID == nil)
+        #expect(manager.currentFocused == nil)
+    }
+
+    @Test("End render pass moves focus when focused element becomes disabled")
+    func endRenderPassMovesPastDisabledFocus() {
+        let manager = FocusManager()
+
+        let textInput = MockFocusable(id: "prompt")
+        let commandButton = MockFocusable(id: "models")
+        manager.register(textInput)
+        manager.register(commandButton)
+        #expect(manager.currentFocusedID == "prompt")
+
+        textInput.canBeFocused = false
+        manager.beginRenderPass()
+        manager.register(textInput)
+        manager.register(commandButton)
+        manager.endRenderPass()
+
+        #expect(manager.currentFocusedID == "models")
+    }
+
     @Test("Focus specific element")
     func focusSpecific() {
         let manager = FocusManager()

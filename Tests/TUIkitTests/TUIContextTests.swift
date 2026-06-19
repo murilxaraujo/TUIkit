@@ -37,7 +37,7 @@ struct TUIContextTests {
         )
 
         #expect(contextA.renderCache.count == 1)
-        #expect(contextB.renderCache.count == 0)
+        #expect(contextB.renderCache.isEmpty)
     }
 
     @Test("State changes invalidate owning context render cache")
@@ -57,7 +57,7 @@ struct TUIContextTests {
 
         box.value = 1
 
-        #expect(context.renderCache.count == 0)
+        #expect(context.renderCache.isEmpty)
     }
 
     @Test("reset clears all services")
