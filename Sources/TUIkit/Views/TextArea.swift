@@ -53,13 +53,17 @@ public struct TextArea: View {
     /// The preferred height when no parent proposes one.
     var preferredLineCount: Int
 
+    /// Action invoked when Return is pressed. When set, Shift+Return inserts a newline.
+    var onSubmitAction: (() -> Void)?
+
     public var body: some View {
         _TextAreaCore(
             text: text,
             prompt: prompt,
             focusID: focusID,
             isDisabled: isDisabled,
-            preferredLineCount: preferredLineCount
+            preferredLineCount: preferredLineCount,
+            onSubmitAction: onSubmitAction
         )
     }
 
@@ -74,6 +78,7 @@ public struct TextArea: View {
         self.focusID = nil
         self.isDisabled = false
         self.preferredLineCount = 4
+        self.onSubmitAction = nil
     }
 }
 
@@ -106,6 +111,17 @@ extension TextArea {
         copy.preferredLineCount = max(1, lineCount)
         return copy
     }
+
+    /// Sets the action to perform when Return is pressed.
+    ///
+    /// When an action is installed, Return submits and Shift+Return inserts a
+    /// newline. Without an action, Return keeps the default multiline behavior
+    /// and inserts a newline.
+    public func onSubmit(_ action: @escaping () -> Void) -> TextArea {
+        var copy = self
+        copy.onSubmitAction = action
+        return copy
+    }
 }
 
 // MARK: - Internal Core View
@@ -116,6 +132,7 @@ private struct _TextAreaCore: View, Renderable, Layoutable {
     let focusID: String?
     let isDisabled: Bool
     let preferredLineCount: Int
+    let onSubmitAction: (() -> Void)?
 
     private let minContentWidth = 10
 
@@ -152,12 +169,14 @@ private struct _TextAreaCore: View, Renderable, Layoutable {
             default: TextAreaHandler(
                 focusID: persistedFocusID,
                 text: text,
-                canBeFocused: !isDisabled
+                canBeFocused: !isDisabled,
+                onSubmit: onSubmitAction
             )
         )
         let handler = handlerBox.value
         handler.text = text
         handler.canBeFocused = !isDisabled
+        handler.onSubmit = onSubmitAction
         handler.clampCursorPosition()
 
         FocusRegistration.register(context: context, handler: handler)

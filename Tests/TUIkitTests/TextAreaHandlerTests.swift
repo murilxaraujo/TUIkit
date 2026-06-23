@@ -24,6 +24,36 @@ struct TextAreaHandlerTests {
         #expect(handler.cursorPosition == 6)
     }
 
+    @Test("Return submits when submit action is installed")
+    func returnSubmitsWhenSubmitActionInstalled() {
+        var text = "Hello"
+        var didSubmit = false
+        let binding = Binding(get: { text }, set: { text = $0 })
+        let handler = TextAreaHandler(focusID: "area", text: binding, onSubmit: { didSubmit = true })
+
+        let handled = handler.handleKeyEvent(KeyEvent(key: .enter))
+
+        #expect(handled == true)
+        #expect(didSubmit == true)
+        #expect(text == "Hello")
+        #expect(handler.cursorPosition == 5)
+    }
+
+    @Test("Shift Return inserts newline when submit action is installed")
+    func shiftReturnInsertsNewlineWhenSubmitActionInstalled() {
+        var text = "Hello"
+        var didSubmit = false
+        let binding = Binding(get: { text }, set: { text = $0 })
+        let handler = TextAreaHandler(focusID: "area", text: binding, onSubmit: { didSubmit = true })
+
+        let handled = handler.handleKeyEvent(KeyEvent(key: .enter, shift: true))
+
+        #expect(handled == true)
+        #expect(didSubmit == false)
+        #expect(text == "Hello\n")
+        #expect(handler.cursorPosition == 6)
+    }
+
     @Test("Up and down preserve preferred column")
     func verticalMovementPreservesColumn() {
         var text = "abcd\nef\nghijk"

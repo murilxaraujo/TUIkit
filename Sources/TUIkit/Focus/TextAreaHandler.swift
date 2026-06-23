@@ -35,17 +35,22 @@ final class TextAreaHandler: Focusable {
     /// Maximum number of undo states to keep.
     private let maxUndoStates = 50
 
+    /// Optional submit action. When set, Return submits and Shift+Return inserts a newline.
+    var onSubmit: (() -> Void)?
+
     init(
         focusID: String,
         text: Binding<String>,
         canBeFocused: Bool = true,
-        cursorPosition: Int? = nil
+        cursorPosition: Int? = nil,
+        onSubmit: (() -> Void)? = nil
     ) {
         self.focusID = focusID
         self.text = text
         self.canBeFocused = canBeFocused
         self.cursorPosition = cursorPosition ?? text.wrappedValue.count
         self.verticalOffset = 0
+        self.onSubmit = onSubmit
     }
 }
 
@@ -86,7 +91,11 @@ extension TextAreaHandler {
             return false
 
         case .enter:
-            insertText("\n")
+            if let onSubmit, !event.shift {
+                onSubmit()
+            } else {
+                insertText("\n")
+            }
             return true
 
         case .paste(let pastedText):

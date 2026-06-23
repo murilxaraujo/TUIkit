@@ -117,6 +117,52 @@ struct ContentView: View {
 - **Focus system**: Tab/Shift+Tab navigation, `.focusSection()` for grouped areas
 - **Render caching**: `.equatable()` for subtree memoization
 
+## Preview Your Views
+
+TUIkit includes a preview workflow for fast visual iteration without launching a full app. Previews are regular Swift executable targets, so they compile with your app code, run in the terminal, and can be watched from an editor or Xcode scheme.
+
+Create a preview executable target that depends on `TUIkit`, `TUIkitPreview`, and your app module, then declare previews with `TUIkitPreviewApp`:
+
+```swift
+import TUIkit
+import TUIkitPreview
+
+@main
+struct MyPreviews: TUIkitPreviewApp {
+    static var previews: [TUIPreview] {
+        TUIPreview("Dashboard", size: .desktop) {
+            DashboardView()
+        }
+
+        TUIPreview("Narrow Empty State", size: .narrow) {
+            DashboardView(items: [])
+        }
+    }
+}
+```
+
+Run a single preview:
+
+```bash
+swift run MyPreviews
+swift run MyPreviews -- --list
+swift run MyPreviews -- --preview dashboard --width 100 --height 30
+```
+
+Use the companion watcher for a live preview loop while editing in Xcode or another editor:
+
+```bash
+swift run tuikit-preview -- --watch swift run MyPreviews -- --preview dashboard
+```
+
+Use `--snapshot` when you want plain rendered output for fixtures, demos, or documentation generation:
+
+```bash
+swift run MyPreviews -- --preview dashboard --snapshot
+```
+
+See [docs/Previews.md](docs/Previews.md) for the full setup, target configuration, and recommended preview patterns.
+
 ## Run the Example App
 
 ```bash

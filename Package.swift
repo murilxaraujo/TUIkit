@@ -21,9 +21,11 @@ let package = Package(
 
         // ── High-level (aggregates all) ─────────────────────────────────────────────────────────────────
         .library(name: "TUIkit", targets: ["TUIkit"]),
+        .library(name: "TUIkitPreview", targets: ["TUIkitPreview"]),
 
         // ── App ─────────────────────────────────────────────────────────────────────────────────────────
         .executable(name: "TUIkitExample", targets: ["TUIkitExample"]),
+        .executable(name: "tuikit-preview", targets: ["TUIkitPreviewCLI"]),
     ],
     dependencies: [
         .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.3"),
@@ -44,13 +46,16 @@ let package = Package(
             dependencies: ["TUIkitCore", "TUIkitStyling", "TUIkitImage", "TUIkitView"],
             resources: [.copy("Localization/translations"), .copy("VERSION")]
         ),
+        .target(name: "TUIkitPreview", dependencies: ["TUIkit"]),
 
         // ── App & Tests ─────────────────────────────────────────────────────────────────────────────────
+        .executableTarget(name: "TUIkitPreviewCLI"),
         .executableTarget(
             name: "TUIkitExample",
             dependencies: ["TUIkit"],
             resources: [.copy("Resources")]
         ),
         .testTarget(name: "TUIkitTests", dependencies: ["TUIkit"]),
+        .testTarget(name: "TUIkitPreviewTests", dependencies: ["TUIkitPreview"]),
     ]
 )
