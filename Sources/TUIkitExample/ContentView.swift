@@ -27,6 +27,7 @@ enum DemoPage: Int, CaseIterable {
     case sliders
     case steppers
     case splitView
+    case dogfoodWorkflow
     case imageFile
     case imageURL
 }
@@ -125,6 +126,8 @@ struct ContentView: View {
         case .splitView:
             SplitViewPage()
                 .statusBarItems(subPageItems(pageSetter: pageSetter))
+        case .dogfoodWorkflow:
+            TaskWorkflowPage()
         case .imageFile:
             ImageFilePage()
         case .imageURL:
@@ -152,7 +155,8 @@ struct ContentView: View {
             "7": .toggles, "8": .textFields, "\\": .secureFields,
             "9": .radioButtons, "0": .spinners, "-": .lists,
             "=": .tables, "[": .sliders, "]": .steppers,
-            ";": .splitView, "'": .imageFile, ",": .imageURL,
+            ";": .splitView, ".": .dogfoodWorkflow,
+            "'": .imageFile, ",": .imageURL,
         ]
 
         if case .character(let ch) = key, let page = mapping[ch] {

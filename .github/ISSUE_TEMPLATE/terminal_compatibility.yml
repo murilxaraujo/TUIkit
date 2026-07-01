@@ -1,0 +1,42 @@
+name: Terminal compatibility report
+description: Record validation results or terminal-specific issues
+title: "[Terminal]: "
+labels: [terminal-compatibility]
+body:
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal and version
+      placeholder: iTerm2 3.x, Ghostty, tmux 3.x, etc.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      value: |
+        - OS:
+        - Shell:
+        - TERM:
+        - Color mode/settings:
+        - Direct or inside tmux/screen:
+    validations:
+      required: true
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Smoke checklist
+      options:
+        - label: App launches cleanly
+        - label: Header shows platform and FPS
+        - label: Keyboard navigation works
+        - label: Resize redraws cleanly
+        - label: q restores terminal state
+        - label: ESC restores terminal state
+        - label: Ctrl+C restores terminal state
+        - label: Unicode sample aligns acceptably
+        - label: Colors are readable
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes, caveats, or screenshots

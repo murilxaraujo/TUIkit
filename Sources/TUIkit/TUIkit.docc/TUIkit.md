@@ -70,6 +70,27 @@ struct MyApp: App {
 - ``WindowGroup``
 - ``renderOnce(content:)``
 
+## Previewing Views
+
+Use the `TUIkitPreview` product for fast visual iteration in a terminal preview executable:
+
+```swift
+import TUIkit
+import TUIkitPreview
+
+@main
+struct MyPreviews: TUIkitPreviewApp {
+    static var previews: [TUIPreview] {
+        TUIPreview("Dashboard", size: .desktop) {
+            DashboardView()
+        }
+    }
+}
+```
+
+Run it directly with `swift run MyPreviews`, select previews with `--preview`, and use `swift run tuikit-preview -- --target MyPreviews --preview dashboard` (or the SwiftPM `tuikit-preview` command plugin) for a live edit/render loop. See `docs/Previews.md` for full setup guidance.
+
+
 ### Views
 
 - ``View``

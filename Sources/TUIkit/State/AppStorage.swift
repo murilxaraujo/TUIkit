@@ -141,9 +141,6 @@ public extension JSONFileStorage {
     }
 
     func synchronize() {
-        lock.lock()
-        defer { lock.unlock() }
-
         saveToDiskSync()
     }
 }
@@ -176,14 +173,19 @@ private extension JSONFileStorage {
     }
 
     func saveToDiskSync() {
-        // Convert Data values to base64 strings for JSON compatibility
+        let snapshot: [String: String]
+
+        lock.lock()
+        // Convert Data values to base64 strings for JSON compatibility.
         var serializable: [String: String] = [:]
         for (key, data) in cache {
             serializable[key] = data.base64EncodedString()
         }
+        snapshot = serializable
+        lock.unlock()
 
         do {
-            let data = try JSONSerialization.data(withJSONObject: serializable, options: .prettyPrinted)
+            let data = try JSONSerialization.data(withJSONObject: snapshot, options: .prettyPrinted)
             try data.write(to: fileURL, options: .atomic)
         } catch {
             // Failed to save - ignore silently
@@ -192,6 +194,28 @@ private extension JSONFileStorage {
 }
 
 // MARK: - Storage Defaults
+
+private final class StorageDefaultsBackendBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _backend: StorageBackend
+
+    init(_ backend: StorageBackend) {
+        self._backend = backend
+    }
+
+    var backend: StorageBackend {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return _backend
+        }
+        set {
+            lock.lock()
+            _backend = newValue
+            lock.unlock()
+        }
+    }
+}
 
 /// Provides the default storage backend for ``AppStorage``.
 ///
@@ -202,11 +226,20 @@ private extension JSONFileStorage {
 /// StorageDefaults.backend = MyCustomBackend()
 /// ```
 public enum StorageDefaults {
+    private static let backendBox = StorageDefaultsBackendBox(JSONFileStorage())
+
     /// The default storage backend used by ``AppStorage``.
     ///
     /// Defaults to a ``JSONFileStorage`` instance that persists to
     /// `$XDG_CONFIG_HOME/[appName]/settings.json`.
-    nonisolated(unsafe) public static var backend: StorageBackend = JSONFileStorage()
+    ///
+    /// Access is synchronized so tests and setup code can safely swap the
+    /// process-wide default backend while other tasks read it. Existing
+    /// `@AppStorage` instances keep the backend captured at initialization.
+    public static var backend: StorageBackend {
+        get { backendBox.backend }
+        set { backendBox.backend = newValue }
+    }
 }
 
 // MARK: - AppStorage Property Wrapper

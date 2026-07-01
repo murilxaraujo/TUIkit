@@ -27,7 +27,7 @@ Statuses:
 
 ## Manual smoke checklist
 
-Run the example app:
+Run the example app (or print the concise checklist with `./scripts/release-validation-checklist.sh`):
 
 ```bash
 make example
@@ -37,6 +37,8 @@ For each terminal environment, record:
 
 - [ ] App launches without shell corruption or warnings.
 - [ ] Initial screen renders correctly.
+- [ ] Header includes platform information and live FPS, for example `macOS 27.0 · arm64 · 60.0 FPS`.
+- [ ] FPS updates continue while idle and during normal interaction.
 - [ ] `Tab` and `Shift+Tab` move focus predictably.
 - [ ] Arrow keys work in lists, menus, sliders, steppers, and text fields where applicable.
 - [ ] `Enter` and `Space` activate focused controls where applicable.
@@ -45,14 +47,16 @@ For each terminal environment, record:
 - [ ] Echo and canonical input are restored after exit.
 - [ ] `stty -a` looks sane after exit.
 - [ ] Narrow widths do not crash or corrupt the shell.
-- [ ] Rapid resizing does not crash the app.
+- [ ] Rapid resizing does not crash the app or leave stale lines.
+- [ ] Focus and cursor animations continue updating.
+- [ ] Async/demo work does not block input, animations, resize, or quit.
 - [ ] Colors remain readable with the active palette.
 - [ ] Disabled, focused, selected, and destructive states are visually distinguishable.
 - [ ] Unicode sample content aligns acceptably for app needs.
 
 ## Targeted lifecycle checks
 
-Use these for release-candidate validation or when touching terminal lifecycle code:
+Use these for release-candidate validation or when touching terminal lifecycle code. The full release checklist lives in [ReleaseValidationChecklist.md](ReleaseValidationChecklist.md).
 
 ### Normal quit
 

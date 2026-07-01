@@ -111,7 +111,7 @@ public final class FocusManager: @unchecked Sendable {
     /// When `true`, the input handler should give the focused element
     /// priority for key events before dispatching to other layers.
     var hasTextInputFocus: Bool {
-        currentFocused is TextFieldHandler
+        currentFocused is TextFieldHandler || currentFocused is TextAreaHandler
     }
 }
 
@@ -426,8 +426,11 @@ extension FocusManager {
 
         // Validate focused element
         if let focusID = focusedID, let section = activeSection {
-            if !section.focusables.contains(where: { $0.focusID == focusID }) {
-                // Previously focused element is gone — auto-focus first available
+            if !section.focusables.contains(where: { $0.focusID == focusID && $0.canBeFocused }) {
+                // Previously focused element is gone or became disabled — auto-focus first available.
+                // This is important for views that intentionally disable a focused control to
+                // enter a command/navigation mode; the stale focused text input must stop
+                // intercepting printable shortcut keys.
                 self.focusedID = nil
                 if let firstFocusable = section.focusables.first(where: { $0.canBeFocused }) {
                     self.focusedID = firstFocusable.focusID

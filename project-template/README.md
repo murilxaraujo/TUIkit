@@ -42,6 +42,7 @@ MyApp/
 - Pre-configured Xcode scheme
 - Cross-platform (macOS, Linux)
 - XDG Base Directory compliant
+- Starter app with explicit route state, stable focus IDs, and status bar shortcut hints
 
 ## Installation Details
 
@@ -67,13 +68,16 @@ tuikit-uninstall
 
 ## Requirements
 
-- macOS 15+ or Linux
+- macOS 14+ or Linux
 - Swift 6.0+
 - Bash shell
 
 ## Documentation
 
 - [TUIkit Documentation](https://docs.tuikit.dev/documentation/tuikit/)
+- [Build a Real App tutorial](../docs/BuildARealAppTutorial.md)
+- [Keyboard and Focus Guide](../docs/KeyboardFocusGuide.md)
+- [Testing Guide](../docs/TestingGuide.md)
 - [TUIkit GitHub](https://github.com/phranck/TUIkit)
 
 ## License

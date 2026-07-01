@@ -121,4 +121,20 @@ struct FrameModifierTests {
         // Should expand to fill available height
         #expect(buffer.height == 10)
     }
+
+    @Test("flexible height frame does not starve fixed siblings in VStack")
+    func flexibleHeightFrameDoesNotStarveFixedSiblings() {
+        let view = VStack(alignment: .leading) {
+            Text("Transcript")
+                .frame(maxHeight: .infinity, alignment: .topLeading)
+            Text("Prompt")
+        }
+
+        let buffer = renderToBuffer(view, context: testContext(height: 8))
+        let content = buffer.lines.joined(separator: "\n")
+
+        #expect(buffer.height == 8)
+        #expect(content.contains("Transcript"))
+        #expect(content.contains("Prompt"))
+    }
 }

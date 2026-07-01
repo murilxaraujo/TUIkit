@@ -36,9 +36,10 @@ extension AppHeader: Renderable {
         let palette = context.environment.palette
         var lines: [String] = []
 
-        // Content lines padded to full width
+        // Keep content lines unpadded here. FrameDiffWriter is responsible for
+        // terminal-line erasure and background padding when emitting output.
         for line in contentBuffer.lines {
-            lines.append(line.padToVisibleWidth(width))
+            lines.append(line)
         }
 
         // Thin divider line

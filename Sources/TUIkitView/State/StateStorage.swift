@@ -35,6 +35,9 @@ public final class StateStorage: @unchecked Sendable {
     /// Lock protecting persisted values, tracking dictionaries, and render-pass state.
     private let lock = NSLock()
 
+    /// Render cache owned by the same runtime context.
+    private weak var renderCache: RenderCache?
+
     // MARK: - State Key
 
     /// A unique key for a single `@State` property on a specific view.
@@ -75,7 +78,13 @@ public final class StateStorage: @unchecked Sendable {
     private var activeIdentities: Set<ViewIdentity> = []
 
     /// Creates an empty state storage.
-    public init() {}
+    ///
+    /// - Parameter renderCache: Cache to invalidate when state changes. Defaults
+    ///   to the shared compatibility cache for standalone/test usage; app
+    ///   runtimes inject their own per-context cache.
+    public init(renderCache: RenderCache = .shared) {
+        self.renderCache = renderCache
+    }
 
     /// The number of stored state entries (for testing/debugging).
     public var count: Int {
@@ -103,9 +112,10 @@ extension StateStorage {
         defer { lock.unlock() }
         if let existing = values[key] as? StateBox<Value> {
             existing.identity = key.identity
+            existing.renderCache = renderCache
             return existing
         }
-        let fresh = StateBox(defaultValue)
+        let fresh = StateBox(defaultValue, renderCache: renderCache ?? .shared)
         fresh.identity = key.identity
         values[key] = fresh
         return fresh
@@ -234,6 +244,9 @@ public final class StateBox<Value>: @unchecked Sendable {
     /// Lock protecting the stored value and owner identity.
     private let lock = NSLock()
 
+    /// Render cache to invalidate when this state changes.
+    weak var renderCache: RenderCache?
+
     /// The identity of the view that owns this state property.
     ///
     /// Set during hydration from ``StateStorage``. Used for targeted
@@ -267,12 +280,13 @@ public final class StateBox<Value>: @unchecked Sendable {
             lock.lock()
             storedValue = newValue
             let identity = storedIdentity
+            let cache = renderCache ?? RenderCache.shared
             lock.unlock()
 
             if let identity {
-                RenderCache.shared.clearAffected(by: identity)
+                cache.clearAffected(by: identity)
             } else {
-                RenderCache.shared.clearAll()
+                cache.clearAll()
             }
             AppState.shared.setNeedsRender()
         }
@@ -281,7 +295,8 @@ public final class StateBox<Value>: @unchecked Sendable {
     /// Creates a state box with an initial value.
     ///
     /// - Parameter value: The initial value.
-    public init(_ value: Value) {
+    public init(_ value: Value, renderCache: RenderCache = .shared) {
         self.storedValue = value
+        self.renderCache = renderCache
     }
 }

@@ -46,6 +46,13 @@ private struct CursorTimerKey: EnvironmentKey {
     static let defaultValue: CursorTimer? = nil
 }
 
+// MARK: - Render Performance
+
+/// EnvironmentKey for recent render-loop performance diagnostics.
+private struct RenderPerformanceKey: EnvironmentKey {
+    static let defaultValue = TUIRenderPerformance()
+}
+
 // MARK: - Focus Indicator Color
 
 /// EnvironmentKey for the focus indicator color in the current subtree.
@@ -103,6 +110,12 @@ extension EnvironmentValues {
     var cursorTimer: CursorTimer? {
         get { self[CursorTimerKey.self] }
         set { self[CursorTimerKey.self] = newValue }
+    }
+
+    /// Recent render-loop performance diagnostics for this runtime context.
+    public var renderPerformance: TUIRenderPerformance {
+        get { self[RenderPerformanceKey.self] }
+        set { self[RenderPerformanceKey.self] = newValue }
     }
 
     /// The focus indicator color for the first border encountered in this subtree.

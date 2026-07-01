@@ -25,7 +25,7 @@
 >
 > See [Production Readiness Plan](docs/ProductionReadinessPlan.md) for the roadmap toward a first-class production TUI framework.
 > See [API Stability Policy](docs/APIStability.md) for current pre-1.0 API compatibility and migration rules.
-> See [Known Limitations](docs/KnownLimitations.md) and [Terminal Compatibility](docs/TerminalCompatibility.md) before evaluating production use.
+> See [Known Limitations](docs/KnownLimitations.md), [Terminal Compatibility](docs/TerminalCompatibility.md), and the [Release Validation Checklist](docs/ReleaseValidationChecklist.md) before evaluating production use.
 
 A SwiftUI-like framework for building Terminal User Interfaces in Swift: no ncurses, no C dependencies, just pure Swift.
 
@@ -117,13 +117,59 @@ struct ContentView: View {
 - **Focus system**: Tab/Shift+Tab navigation, `.focusSection()` for grouped areas
 - **Render caching**: `.equatable()` for subtree memoization
 
+## Preview Your Views
+
+TUIkit includes a preview workflow for fast visual iteration without launching a full app. Previews are regular Swift executable targets, so they compile with your app code, run in the terminal, and can be watched from an editor or Xcode scheme.
+
+Create a preview executable target that depends on `TUIkit`, `TUIkitPreview`, and your app module, then declare previews with `TUIkitPreviewApp`:
+
+```swift
+import TUIkit
+import TUIkitPreview
+
+@main
+struct MyPreviews: TUIkitPreviewApp {
+    static var previews: [TUIPreview] {
+        TUIPreview("Dashboard", size: .desktop) {
+            DashboardView()
+        }
+
+        TUIPreview("Narrow Empty State", size: .narrow) {
+            DashboardView(items: [])
+        }
+    }
+}
+```
+
+Run a single preview directly, or use the package-level live preview runner:
+
+```bash
+swift run MyPreviews
+swift run MyPreviews -- --list
+swift run MyPreviews -- --preview dashboard --size 100x30
+
+swift run tuikit-preview -- --target MyPreviews --preview dashboard --size 100x30
+swift run tuikit-preview -- list --target MyPreviews
+swift package plugin tuikit-preview --target MyPreviews --preview dashboard
+```
+
+Add `.tuikit-preview.yml` to persist defaults (`target`, `defaultPreview`, `theme`, and `size`). Pass `--no-watch` for a one-shot build/render; by default the runner rebuilds and rerenders when Swift package files change.
+
+Use `--snapshot` when you want plain rendered output for fixtures, demos, or documentation generation:
+
+```bash
+swift run MyPreviews -- --preview dashboard --snapshot
+```
+
+See [docs/Previews.md](docs/Previews.md) for the full setup, target configuration, and recommended preview patterns.
+
 ## Run the Example App
 
 ```bash
 make example
 ```
 
-This runs `swift run TUIkitExample`. Press `q` or `ESC` to exit.
+This runs `swift run TUIkitExample`. Press `q`, `ESC`, or `Ctrl+C` to exit. During production-readiness validation, confirm the header shows platform information plus live FPS (for example, `macOS 27.0 · arm64 · 60.0 FPS`) and that resize, focus/cursor animations, async responsiveness, and terminal cleanup behave correctly. See the [Release Validation Checklist](docs/ReleaseValidationChecklist.md).
 
 ## Installation
 
@@ -145,7 +191,7 @@ Add TUIkit to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/phranck/TUIkit.git", branch: "main")
+    .package(url: "https://github.com/phranck/TUIkit.git", exact: "0.6.0")
 ]
 ```
 
@@ -255,6 +301,19 @@ Tests/
 - All 1172 tests run in parallel
 - The `Terminal` class handles raw mode and cursor control via POSIX `termios`
 - See [Known Limitations](docs/KnownLimitations.md) and [Terminal Compatibility](docs/TerminalCompatibility.md) when validating real terminal behavior.
+
+## Production-readiness guides
+
+- [Build a Real App tutorial](docs/BuildARealAppTutorial.md)
+- [Testing Guide](docs/TestingGuide.md)
+- [Custom Component Guide](docs/CustomComponentGuide.md)
+- [Theming and Style Guide](docs/ThemingAndStyleGuide.md)
+- [Keyboard and Focus Guide](docs/KeyboardFocusGuide.md)
+- [Performance Guide](docs/PerformanceGuide.md)
+- [Troubleshooting](docs/Troubleshooting.md)
+- [Supported Platforms](docs/SupportedPlatforms.md)
+- [Terminal Input Policy](docs/TerminalInputPolicy.md)
+- [Release Process](docs/ReleaseProcess.md)
 
 ## License
 

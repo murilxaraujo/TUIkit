@@ -200,8 +200,9 @@ extension AppRunner {
             usleep(22_800)
         }
 
-        // Stop pulse timer before cleanup
+        // Stop animation timers before cleanup.
         pulseTimer.stop()
+        cursorTimer.stop()
 
         // Cleanup
         cleanup()
