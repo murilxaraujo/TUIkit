@@ -48,6 +48,40 @@ struct TUIkitPreviewTests {
         #expect(previews.map(\.id) == ["one", "two", "extra"])
     }
 
+    @Test("Registry stores descriptors in registration order")
+    func registryStoresDescriptors() {
+        TUIkitPreviewRegistry.reset()
+        defer { TUIkitPreviewRegistry.reset() }
+
+        TUIkitPreviewRegistry.register(TUIPreview("One") { Text("1") }.descriptor)
+        TUIkitPreviewRegistry.register(TUIPreview("Two") { Text("2") }.descriptor)
+
+        #expect(TUIkitPreviewRegistry.all().map(\.id) == ["one", "two"])
+        #expect(TUIkitPreviewRegistry.find(idOrName: "two")?.name == "Two")
+        #expect(TUIkitPreviewRegistry.find(idOrName: "ONE")?.id == "one")
+    }
+
+    @Test("Registry ignores duplicate identifiers")
+    func registryIgnoresDuplicateIDs() {
+        TUIkitPreviewRegistry.reset()
+        defer { TUIkitPreviewRegistry.reset() }
+
+        TUIkitPreviewRegistry.register(TUIPreview("Duplicate", id: "same") { Text("A") }.descriptor)
+        TUIkitPreviewRegistry.register(TUIPreview("Duplicate Again", id: "same") { Text("B") }.descriptor)
+
+        #expect(TUIkitPreviewRegistry.all().map(\.name) == ["Duplicate"])
+    }
+
+    @Test("Preview size parses CLI form")
+    func previewSizeParsesCLIForm() throws {
+        let size = try #require(TUIPreviewSize(string: "100x30"))
+        let unicodeSize = try #require(TUIPreviewSize(string: "48×12"))
+
+        #expect(size == TUIPreviewSize(width: 100, height: 30))
+        #expect(unicodeSize == TUIPreviewSize(width: 48, height: 12))
+        #expect(TUIPreviewSize(string: "bad") == nil)
+    }
+
     private func buildPreviews(includeExtra: Bool) -> [TUIPreview] {
         TUIPreviewBuilder.buildBlock(
             TUIPreviewBuilder.buildExpression(TUIPreview("One") { Text("1") }),

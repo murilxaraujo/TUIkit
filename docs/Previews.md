@@ -7,9 +7,10 @@ TUIkit previews give you a native-feeling edit/build/render loop for terminal vi
 - Deterministic previews of any `View` on a fixed terminal canvas.
 - A SwiftUI-like declaration style with `TUIPreview` and result-builder lists.
 - CLI selection by stable preview ID.
-- Width/height overrides for responsive and narrow-terminal checks.
+- Size and theme metadata for responsive and narrow-terminal checks.
 - Snapshot output for docs and regression fixtures.
-- A watcher command that reruns previews on source changes.
+- A package-level watcher command that rebuilds and rerenders on source changes.
+- A SwiftPM command plugin for Xcode-adjacent workflows.
 
 ## Add a preview executable
 
@@ -74,7 +75,8 @@ swift run MyAppPreviews -- --preview "Dashboard / Narrow"
 Override the terminal canvas without changing source:
 
 ```bash
-swift run MyAppPreviews -- --preview dashboard --width 100 --height 30
+swift run MyAppPreviews -- --preview dashboard --size 100x30
+# --width and --height remain supported for compatibility.
 ```
 
 Print only the render buffer, without preview chrome:
@@ -85,13 +87,38 @@ swift run MyAppPreviews -- --preview dashboard --snapshot
 
 ## Live preview loop
 
-Use the `tuikit-preview` executable to rerun your preview command whenever `Package.swift` or Swift source files change:
+Use the `tuikit-preview` executable to build the preview target, run the selected preview, and rerun it whenever `Package.swift`, `Package.resolved`, or Swift source files change:
+
+```bash
+swift run tuikit-preview -- --target MyAppPreviews --preview dashboard
+swift run tuikit-preview -- list --target MyAppPreviews
+swift run tuikit-preview -- --target MyAppPreviews --preview dashboard --size 100x30 --theme dark
+```
+
+Use `--no-watch` for a one-shot build/render. You can also persist defaults in `.tuikit-preview.yml`:
+
+```yaml
+target: MyAppPreviews
+defaultPreview: dashboard
+theme: dark
+size:
+  width: 100
+  height: 30
+```
+
+For Xcode-adjacent workflows, run the command plugin from SwiftPM or Xcode's package plugin UI:
+
+```bash
+swift package plugin tuikit-preview --target MyAppPreviews --preview dashboard
+```
+
+The older command-wrapper mode remains available for custom scripts:
 
 ```bash
 swift run tuikit-preview -- --watch swift run MyAppPreviews -- --preview dashboard
 ```
 
-This works well next to Xcode: keep Xcode focused on editing and place the preview terminal beside it. You can also create an Xcode scheme that runs `MyAppPreviews` directly, or a custom behavior/external tool that invokes the watcher command.
+This works well next to Xcode: keep Xcode focused on editing and place the preview terminal beside it.
 
 ## Recommended preview coverage
 

@@ -28,7 +28,7 @@ import TUIkit
 /// ```bash
 /// swift run MyPreviews
 /// swift run MyPreviews -- --list
-/// swift run MyPreviews -- --preview dashboard --width 100 --height 30
+/// swift run MyPreviews -- --preview dashboard --size 100x30
 /// ```
 @MainActor
 public protocol TUIkitPreviewApp {
@@ -40,7 +40,10 @@ public protocol TUIkitPreviewApp {
 public extension TUIkitPreviewApp {
     /// Runs the preview command-line interface.
     static func main() {
-        TUIkitPreviewConsole(previews: previews).run(arguments: Array(CommandLine.arguments.dropFirst()))
+        previews.forEach { TUIkitPreviewRegistry.register($0.descriptor) }
+        TUIkitPreviewConsole(previews: previews + TUIkitPreviewRegistry.all().map(TUIPreview.init)).run(
+            arguments: Array(CommandLine.arguments.dropFirst())
+        )
     }
 }
 
@@ -51,7 +54,10 @@ public struct TUIkitPreviewConsole {
 
     /// Creates a preview console for a set of previews.
     public init(previews: [TUIPreview]) {
-        self.previews = previews
+        var seenIDs = Set<String>()
+        self.previews = previews.filter { preview in
+            seenIDs.insert(preview.id).inserted
+        }
     }
 
     /// Runs the console with command-line arguments.
@@ -69,20 +75,25 @@ public struct TUIkitPreviewConsole {
         }
 
         guard let preview = selectedPreview(named: options.previewID) else {
-            print("No preview matched '\(options.previewID ?? "")'. Use --list to see available previews.")
+            if previews.isEmpty {
+                print("No TUIkit previews registered.")
+            } else {
+                print("No preview matched '\(options.previewID ?? "")'. Use --list to see available previews.")
+            }
             return
         }
 
-        let size = TUIPreviewSize(
+        let size = options.size ?? TUIPreviewSize(
             width: options.width ?? preview.size.width,
             height: options.height ?? preview.size.height
         )
-        let buffer = preview.render(size: size)
+        let theme = options.theme ?? preview.theme
+        let buffer = preview.render(size: size, theme: theme)
 
         if options.snapshot {
             print(buffer.lines.joined(separator: "\n"))
         } else {
-            print(Self.renderChrome(for: preview, size: size, buffer: buffer))
+            print(Self.renderChrome(for: preview, size: size, theme: theme, buffer: buffer))
         }
     }
 
@@ -93,7 +104,7 @@ public struct TUIkitPreviewConsole {
         }
 
         for preview in previews {
-            print("\(preview.id)\t\(preview.name)\t\(preview.size.width)x\(preview.size.height)")
+            print("\(preview.id)\t\(preview.name)\t\(preview.size.width)x\(preview.size.height)\t\(preview.theme.rawValue)")
         }
     }
 
@@ -104,15 +115,15 @@ public struct TUIkitPreviewConsole {
         }
     }
 
-    private static func renderChrome(for preview: TUIPreview, size: TUIPreviewSize, buffer: FrameBuffer) -> String {
-        let title = " TUIkit Preview: \(preview.name) (\(size.width)×\(size.height)) "
+    private static func renderChrome(for preview: TUIPreview, size: TUIPreviewSize, theme: PreviewTheme, buffer: FrameBuffer) -> String {
+        let title = " TUIkit Preview: \(preview.name) (\(size.width)×\(size.height), \(theme.rawValue)) "
         let borderWidth = max(size.width, title.count + 2)
         let top = "┌" + title.padding(toLength: borderWidth, withPad: "─", startingAt: 0) + "┐"
         let bottom = "└" + String(repeating: "─", count: borderWidth) + "┘"
         let body = normalizedLines(buffer.lines, width: borderWidth, height: size.height)
             .map { "│" + $0 + "│" }
             .joined(separator: "\n")
-        let footer = "  --list  show previews    --preview <id> select    --snapshot plain output"
+        let footer = "  Press r reload · p previews · q quit    --list previews · --snapshot plain output"
         return [top, body, bottom, footer].joined(separator: "\n")
     }
 
@@ -132,8 +143,10 @@ public struct TUIkitPreviewConsole {
     Options:
       --list                    List registered previews.
       --preview <id-or-name>     Render a specific preview. Defaults to the first preview.
+      --size <WxH>               Override preview size.
       --width <columns>          Override preview width.
       --height <rows>            Override preview height.
+      --theme <system|light|dark> Override preview theme metadata.
       --snapshot                 Print only the rendered buffer, without preview chrome.
       --help                     Show this help.
     """
@@ -144,8 +157,10 @@ private struct PreviewOptions {
     var help = false
     var snapshot = false
     var previewID: String?
+    var size: TUIPreviewSize?
     var width: Int?
     var height: Int?
+    var theme: PreviewTheme?
 
     init(arguments: [String]) {
         var iterator = arguments.makeIterator()
@@ -153,18 +168,24 @@ private struct PreviewOptions {
             switch argument {
             case "--":
                 continue
-            case "--list":
+            case "--list", "list":
                 list = true
+            case "--tuikit-preview":
+                continue
             case "--help", "-h":
                 help = true
             case "--snapshot":
                 snapshot = true
             case "--preview", "-p":
                 previewID = iterator.next()
+            case "--size":
+                size = iterator.next().flatMap(TUIPreviewSize.init(string:))
             case "--width", "-w":
                 width = iterator.next().flatMap(Int.init)
             case "--height":
                 height = iterator.next().flatMap(Int.init)
+            case "--theme":
+                theme = iterator.next().flatMap(PreviewTheme.init(rawValue:))
             default:
                 if previewID == nil {
                     previewID = argument

@@ -88,7 +88,7 @@ struct MyPreviews: TUIkitPreviewApp {
 }
 ```
 
-Run it directly with `swift run MyPreviews`, select previews with `--preview`, and use `swift run tuikit-preview -- --watch swift run MyPreviews` for a live edit/render loop. See `docs/Previews.md` for full setup guidance.
+Run it directly with `swift run MyPreviews`, select previews with `--preview`, and use `swift run tuikit-preview -- --target MyPreviews --preview dashboard` (or the SwiftPM `tuikit-preview` command plugin) for a live edit/render loop. See `docs/Previews.md` for full setup guidance.
 
 
 ### Views

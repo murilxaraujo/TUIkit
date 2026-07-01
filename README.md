@@ -141,19 +141,19 @@ struct MyPreviews: TUIkitPreviewApp {
 }
 ```
 
-Run a single preview:
+Run a single preview directly, or use the package-level live preview runner:
 
 ```bash
 swift run MyPreviews
 swift run MyPreviews -- --list
-swift run MyPreviews -- --preview dashboard --width 100 --height 30
+swift run MyPreviews -- --preview dashboard --size 100x30
+
+swift run tuikit-preview -- --target MyPreviews --preview dashboard --size 100x30
+swift run tuikit-preview -- list --target MyPreviews
+swift package plugin tuikit-preview --target MyPreviews --preview dashboard
 ```
 
-Use the companion watcher for a live preview loop while editing in Xcode or another editor:
-
-```bash
-swift run tuikit-preview -- --watch swift run MyPreviews -- --preview dashboard
-```
+Add `.tuikit-preview.yml` to persist defaults (`target`, `defaultPreview`, `theme`, and `size`). Pass `--no-watch` for a one-shot build/render; by default the runner rebuilds and rerenders when Swift package files change.
 
 Use `--snapshot` when you want plain rendered output for fixtures, demos, or documentation generation:
 
