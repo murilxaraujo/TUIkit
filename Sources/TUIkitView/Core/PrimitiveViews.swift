@@ -97,6 +97,15 @@ public struct ViewArray<Element: View>: View {
 public struct AnyView: View {
     private let _render: (RenderContext) -> FrameBuffer
 
+    /// Creates an AnyView from a custom render closure.
+    ///
+    /// This is framework infrastructure used by semantic registries that must
+    /// defer destination construction until the destination's render identity is
+    /// active, allowing property wrappers such as `@State` to hydrate correctly.
+    public init(render: @escaping (RenderContext) -> FrameBuffer) {
+        self._render = render
+    }
+
     /// Creates an AnyView wrapping the given view.
     ///
     /// - Parameter view: The view to type-erase.

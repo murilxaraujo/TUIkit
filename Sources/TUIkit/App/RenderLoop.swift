@@ -315,6 +315,7 @@ private extension RenderLoop {
         tuiContext.preferences.beginRenderPass()
         focusManager.beginRenderPass()
         statusBar.clearSectionItems()
+        statusBar.resetNavigationDepth()
         appHeader.beginRenderPass()
         statusBar.focusManager = focusManager
         tuiContext.lifecycle.beginRenderPass()

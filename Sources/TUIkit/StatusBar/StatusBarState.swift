@@ -49,6 +49,12 @@ public final class StatusBarState: @unchecked Sendable {
     /// Stack of user contexts with their items (legacy push/pop API).
     private var userContextStack: [(context: String, items: [any StatusBarItemProtocol])] = []
 
+    /// Active navigation depth reported by navigation containers during the current render pass.
+    ///
+    /// This lets `.rootOnly` quit behavior work with declarative `NavigationStack`
+    /// routing, not just the legacy status-bar context stack.
+    private var navigationDepth: Int = 0
+
     /// Global user items that are always shown (lowest priority).
     private var userGlobalItems: [any StatusBarItemProtocol] = []
 
@@ -139,9 +145,9 @@ public final class StatusBarState: @unchecked Sendable {
         self.init(appState: AppState())
     }
 
-    /// Whether we are at the root level (no context pushed).
+    /// Whether we are at the root level (no pushed status-bar context or navigation destination).
     public var isAtRoot: Bool {
-        userContextStack.isEmpty
+        userContextStack.isEmpty && navigationDepth == 0
     }
 
     /// Whether quit is currently allowed based on `quitBehavior`.
@@ -275,6 +281,16 @@ extension StatusBarState {
     /// Sets the global user items without triggering a re-render.
     func setItemsSilently(_ items: [any StatusBarItemProtocol]) {
         userGlobalItems = items
+    }
+
+    /// Resets per-frame navigation state before the next render pass.
+    func resetNavigationDepth() {
+        navigationDepth = 0
+    }
+
+    /// Records the deepest active navigation stack depth for the current render pass.
+    func reportNavigationDepth(_ depth: Int) {
+        navigationDepth = max(navigationDepth, max(0, depth))
     }
 
     /// Registers status bar items for a focus section.

@@ -59,6 +59,7 @@ struct MyApp: App {
 - <doc:Preferences>
 - <doc:CustomViews>
 - <doc:KeyboardShortcuts>
+- <doc:NavigationStack>
 - <doc:PaletteReference>
 - <doc:ListAndTable>
 - <doc:LayoutSystem>
@@ -140,6 +141,9 @@ Run it directly with `swift run MyPreviews`, select previews with `--preview`, a
 - ``Panel``
 - ``Alert``
 - ``Dialog``
+- ``NavigationStack``
+- ``NavigationPath``
+- ``NavigationLink``
 - ``NavigationSplitView``
 
 ### Data Collections

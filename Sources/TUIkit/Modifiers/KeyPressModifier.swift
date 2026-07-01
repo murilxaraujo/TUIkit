@@ -28,17 +28,19 @@ struct KeyPressModifier<Content: View>: View {
 
 extension KeyPressModifier: Renderable {
     func renderToBuffer(context: RenderContext) -> FrameBuffer {
-        // Register the key handler
-        context.environment.keyEventDispatcher!.addHandler { [keys, handler] event in
-            // Check if we should handle this key
-            if let allowedKeys = keys {
-                guard allowedKeys.contains(event.key) else {
-                    return false
+        if context.allowsRenderSideEffects {
+            // Register the key handler only for the live render pass.
+            context.environment.keyEventDispatcher!.addHandler { [keys, handler] event in
+                // Check if we should handle this key
+                if let allowedKeys = keys {
+                    guard allowedKeys.contains(event.key) else {
+                        return false
+                    }
                 }
-            }
 
-            // Call handler and return whether it consumed the event
-            return handler(event)
+                // Call handler and return whether it consumed the event
+                return handler(event)
+            }
         }
 
         // Render the content

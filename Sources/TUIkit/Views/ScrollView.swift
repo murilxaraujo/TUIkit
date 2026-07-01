@@ -111,7 +111,9 @@ private struct _ScrollViewCore<Content: View>: View, Renderable, Layoutable {
         }
         lastContentHeightBox.value = contentHeight
 
-        registerKeyHandlers(offsetBox: offsetBox, maxOffset: maxOffset, viewportHeight: viewportHeight, context: context)
+        if context.allowsRenderSideEffects {
+            registerKeyHandlers(offsetBox: offsetBox, maxOffset: maxOffset, viewportHeight: viewportHeight, context: context)
+        }
 
         return viewport(contentBuffer, offset: offsetBox.value, height: viewportHeight, context: context)
     }

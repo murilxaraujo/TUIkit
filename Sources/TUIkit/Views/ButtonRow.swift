@@ -113,8 +113,9 @@ private struct _ButtonRowCore: View, Renderable {
 
         // Render each button
         var buttonBuffers: [FrameBuffer] = []
-        for button in buttons {
-            let buffer = TUIkit.renderToBuffer(button, context: context)
+        for (index, button) in buttons.enumerated() {
+            let buttonContext = context.withChildIdentity(type: Button.self, index: index)
+            let buffer = TUIkit.renderToBuffer(button, context: buttonContext)
             buttonBuffers.append(buffer)
         }
 

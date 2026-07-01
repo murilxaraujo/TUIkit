@@ -57,6 +57,19 @@ public struct RenderContext {
     /// Views should skip side-effects like focus registration when this is true.
     public var isMeasuring: Bool = false
 
+    /// The current view evaluation phase.
+    ///
+    /// Defaults to ``ViewEvaluationPhase/render``. Semantic collection passes
+    /// use ``ViewEvaluationPhase/semanticCollection`` so modifiers can collect
+    /// declarations without registering live input/focus/status side effects.
+    public var phase: ViewEvaluationPhase = .render
+
+    /// Whether the context is in the live render phase and may perform
+    /// side-effecting registrations for input, focus, lifecycle, and status UI.
+    public var allowsRenderSideEffects: Bool {
+        !isMeasuring && phase == .render
+    }
+
     /// Creates a new RenderContext.
     ///
     /// - Parameters:
@@ -83,6 +96,19 @@ public struct RenderContext {
     public func withEnvironment(_ environment: EnvironmentValues) -> Self {
         var copy = self
         copy.environment = environment
+        return copy
+    }
+
+    /// Creates a new context with a different evaluation phase.
+    ///
+    /// - Parameter phase: The phase to use while evaluating a subtree.
+    /// - Returns: A new RenderContext with the updated phase.
+    public func withPhase(_ phase: ViewEvaluationPhase) -> Self {
+        var copy = self
+        copy.phase = phase
+        if phase != .render {
+            copy.isMeasuring = true
+        }
         return copy
     }
 

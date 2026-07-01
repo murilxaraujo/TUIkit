@@ -53,6 +53,25 @@ extension StatusBarSystemItemsModifier: Renderable {
 
 // MARK: - View Extension
 
+// MARK: - StatusBarQuitBehaviorModifier
+
+/// A modifier that configures when the built-in quit shortcut is active.
+struct StatusBarQuitBehaviorModifier<Content: View>: View {
+    let content: Content
+    let behavior: QuitBehavior
+
+    var body: Never {
+        fatalError("StatusBarQuitBehaviorModifier renders via Renderable")
+    }
+}
+
+extension StatusBarQuitBehaviorModifier: Renderable {
+    func renderToBuffer(context renderContext: RenderContext) -> FrameBuffer {
+        renderContext.environment.statusBar.quitBehavior = behavior
+        return TUIkit.renderToBuffer(content, context: renderContext)
+    }
+}
+
 public extension View {
     /// Configures which system items are shown in the status bar.
     ///
@@ -84,5 +103,22 @@ public extension View {
             showTheme: theme,
             showAppearance: appearance
         )
+    }
+
+    /// Configures when the built-in quit shortcut and status-bar item are active.
+    ///
+    /// Use `.rootOnly` for navigation-based apps where `q` should only quit from
+    /// the root screen while subpages use Escape to navigate back. Ctrl+C remains
+    /// a terminal-level quit request regardless of this setting.
+    ///
+    /// ```swift
+    /// ContentView()
+    ///     .statusBarQuitBehavior(.rootOnly)
+    /// ```
+    ///
+    /// - Parameter behavior: The quit behavior to apply.
+    /// - Returns: A view with the configured quit behavior.
+    func statusBarQuitBehavior(_ behavior: QuitBehavior) -> some View {
+        StatusBarQuitBehaviorModifier(content: self, behavior: behavior)
     }
 }

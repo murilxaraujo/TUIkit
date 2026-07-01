@@ -89,7 +89,7 @@ internal final class AppRunner<A: App> {
 
     init(app: A) {
         self.app = app
-        self.appState = AppState()
+        self.appState = AppState.shared
         self.appearanceManager = ThemeManager(items: AppearanceRegistry.all, renderTrigger: { [appState] in appState.setNeedsRender() })
         self.appHeader = AppHeaderState()
         self.focusManager = FocusManager()

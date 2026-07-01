@@ -24,8 +24,10 @@ struct OnAppearModifier<Content: View>: View {
 
 extension OnAppearModifier: Renderable {
     func renderToBuffer(context: RenderContext) -> FrameBuffer {
-        // Record appearance and execute action if first time
-        _ = context.environment.lifecycle!.recordAppear(token: token, action: action)
+        if context.allowsRenderSideEffects {
+            // Record appearance and execute action if first time
+            _ = context.environment.lifecycle!.recordAppear(token: token, action: action)
+        }
 
         // Render content
         return TUIkit.renderToBuffer(content, context: context)
@@ -52,11 +54,13 @@ struct OnDisappearModifier<Content: View>: View {
 
 extension OnDisappearModifier: Renderable {
     func renderToBuffer(context: RenderContext) -> FrameBuffer {
-        // Register the disappear callback
-        context.environment.lifecycle!.registerDisappear(token: token, action: action)
+        if context.allowsRenderSideEffects {
+            // Register the disappear callback
+            context.environment.lifecycle!.registerDisappear(token: token, action: action)
 
-        // Mark as visible in current render
-        _ = context.environment.lifecycle!.recordAppear(token: token, action: {})
+            // Mark as visible in current render
+            _ = context.environment.lifecycle!.recordAppear(token: token, action: {})
+        }
 
         // Render content
         return TUIkit.renderToBuffer(content, context: context)
@@ -88,22 +92,24 @@ struct TaskModifier<Content: View>: View {
 
 extension TaskModifier: Renderable {
     func renderToBuffer(context: RenderContext) -> FrameBuffer {
-        let lifecycle = context.environment.lifecycle!
+        if context.allowsRenderSideEffects {
+            let lifecycle = context.environment.lifecycle!
 
-        // Start task on first appearance
-        let isFirstAppear = !lifecycle.hasAppeared(token: token)
+            // Start task on first appearance
+            let isFirstAppear = !lifecycle.hasAppeared(token: token)
 
-        _ = lifecycle.recordAppear(token: token) {
-            // Only start task on first appear
-        }
+            _ = lifecycle.recordAppear(token: token) {
+                // Only start task on first appear
+            }
 
-        if isFirstAppear {
-            lifecycle.startTask(token: token, priority: priority, operation: task)
-        }
+            if isFirstAppear {
+                lifecycle.startTask(token: token, priority: priority, operation: task)
+            }
 
-        // Register disappear callback to cancel task
-        lifecycle.registerDisappear(token: token) { [lifecycle] in
-            lifecycle.cancelTask(token: token)
+            // Register disappear callback to cancel task
+            lifecycle.registerDisappear(token: token) { [lifecycle] in
+                lifecycle.cancelTask(token: token)
+            }
         }
 
         // Render content

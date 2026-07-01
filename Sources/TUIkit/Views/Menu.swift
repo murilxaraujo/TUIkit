@@ -203,7 +203,7 @@ private struct _MenuCore: View, Renderable {
         let palette = context.environment.palette
 
         // Register key handlers if this is an interactive menu
-        if let binding = selectionBinding {
+        if let binding = selectionBinding, context.allowsRenderSideEffects {
             registerKeyHandlers(binding: binding, context: context)
         }
 

@@ -187,7 +187,9 @@ public func renderToBuffer<V: View>(_ view: V, context: RenderContext) -> FrameB
             }
         }
 
-        context.environment.stateStorage!.markActive(context.identity)
+        if context.allowsRenderSideEffects {
+            context.environment.stateStorage!.markActive(context.identity)
+        }
 
         return renderToBuffer(body, context: childContext)
     }

@@ -43,8 +43,8 @@ extension FocusSectionModifier: Renderable {
     func renderToBuffer(context: RenderContext) -> FrameBuffer {
         let focusManager = context.environment.focusManager
 
-        // Register the section with the focus manager (idempotent, skip during measurement).
-        if !context.isMeasuring {
+        // Register the section with the focus manager only during the live render pass.
+        if context.allowsRenderSideEffects {
             focusManager.registerSection(id: sectionID)
         }
 
@@ -56,7 +56,7 @@ extension FocusSectionModifier: Renderable {
         // If this section is active, compute the breathing indicator color.
         // The first border view in the subtree will consume this and render ●.
         // Never active during measurement.
-        if !context.isMeasuring && focusManager.isActiveSection(sectionID) {
+        if context.allowsRenderSideEffects && focusManager.isActiveSection(sectionID) {
             let accentColor = context.environment.palette.accent
             let dimColor = accentColor.opacity(ViewConstants.focusBorderDim)
             sectionContext.environment.focusIndicatorColor = Color.lerp(dimColor, accentColor, phase: context.environment.pulsePhase)

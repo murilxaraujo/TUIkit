@@ -41,8 +41,8 @@ struct FeatureBox: View, Equatable {
 /// Displays a centered menu with all available demos and
 /// feature highlight boxes at the bottom.
 struct MainMenuPage: View {
-    @Binding var currentPage: DemoPage
     @Binding var menuSelection: Int
+    let onNavigate: (DemoPage) -> Void
 
     var body: some View {
         VStack(spacing: 1) {
@@ -77,7 +77,7 @@ struct MainMenuPage: View {
                      onSelect: { index in
                          // Navigate to the selected page
                          if let page = DemoPage(rawValue: index + 1) {
-                             currentPage = page
+                             onNavigate(page)
                          }
                      },
                      selectedColor: .palette.accent,

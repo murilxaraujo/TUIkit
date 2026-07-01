@@ -9,7 +9,7 @@ import TUIkit
 // MARK: - Demo Page Enum
 
 /// The available demo pages in the example app.
-enum DemoPage: Int, CaseIterable {
+enum DemoPage: Int, CaseIterable, Hashable {
     case menu
     case textStyles
     case colors
@@ -32,100 +32,89 @@ enum DemoPage: Int, CaseIterable {
     case imageURL
 }
 
-// MARK: - Content View (Page Router)
+// MARK: - Content View
 
-/// The main content view that switches between pages.
+/// The main content view for the example app.
 ///
-/// This view acts as a router, displaying the appropriate demo page
-/// based on the current state. It uses `@State` for all reactive
-/// properties — exactly like SwiftUI.
+/// The example now uses ``NavigationStack`` for page routing. The menu is the
+/// non-removable root, and demo pages are pushed as ``DemoPage`` route values.
 struct ContentView: View {
-    @State var currentPage: DemoPage = .menu
-    @State var menuSelection: Int = 0
+    @State private var path: [DemoPage] = []
+    @State private var menuSelection: Int = 0
 
     var body: some View {
-        // Capture bindings for use in closures
-        let pageSetter = $currentPage
+        let pathBinding = $path
 
-        // Show current page based on state
-        // Note: Background color is set by AppRunner using theme.background
-        pageContent(for: currentPage, pageSetter: pageSetter)
-            .onKeyPress { event in
-                switch event.key {
-                case .escape:
-                    // ESC goes back to menu (or exits if already on menu)
-                    if currentPage != .menu {
-                        pageSetter.wrappedValue = .menu
-                        return true  // Consumed
-                    }
-                    return false  // Let default handler exit the app
-                default:
-                    // Quick-jump shortcuts only work from the menu page.
-                    // On sub-pages they would conflict with text input
-                    // (e.g. TextField, SecureField).
-                    guard currentPage == .menu else { return false }
-                    return handleMenuShortcut(event.key)
-                }
+        NavigationStack(path: pathBinding) {
+            MainMenuPage(menuSelection: $menuSelection) { page in
+                pathBinding.wrappedValue.append(page)
             }
+            .statusBarItems {
+                StatusBarItem(shortcut: Shortcut.arrowsUpDown, label: "nav")
+                StatusBarItem(shortcut: Shortcut.enter, label: "select", key: .enter)
+                StatusBarItem(shortcut: Shortcut.range("1", "9") + ", 0", label: "jump")
+            }
+            .onKeyPress { event in
+                handleMenuShortcut(event.key, path: pathBinding)
+            }
+            .navigationDestination(for: DemoPage.self) { page in
+                pageContent(for: page, path: pathBinding)
+            }
+        }
     }
 
     @ViewBuilder
-    private func pageContent(for page: DemoPage, pageSetter: Binding<DemoPage>) -> some View {
+    private func pageContent(for page: DemoPage, path: Binding<[DemoPage]>) -> some View {
         switch page {
         case .menu:
-            MainMenuPage(currentPage: $currentPage, menuSelection: $menuSelection)
-                 .statusBarItems {
-                     StatusBarItem(shortcut: Shortcut.arrowsUpDown, label: "nav")
-                     StatusBarItem(shortcut: Shortcut.enter, label: "select", key: .enter)
-                     StatusBarItem(shortcut: Shortcut.range("1", "9") + ", 0", label: "jump")
-                 }
+            EmptyView()
         case .textStyles:
             TextStylesPage()
-                .statusBarItems(subPageItems(pageSetter: pageSetter))
+                .statusBarItems(subPageItems())
         case .colors:
             ColorsPage()
-                .statusBarItems(subPageItems(pageSetter: pageSetter))
+                .statusBarItems(subPageItems())
         case .containers:
             ContainersPage()
-                .statusBarItems(subPageItems(pageSetter: pageSetter))
+                .statusBarItems(subPageItems())
         case .overlays:
-            OverlaysPage(onBack: { pageSetter.wrappedValue = .menu })
+            OverlaysPage(onBack: { path.wrappedValue.removeAll() })
         case .layout:
             LayoutPage()
-                .statusBarItems(subPageItems(pageSetter: pageSetter))
+                .statusBarItems(subPageItems())
         case .buttons:
             ButtonsPage()
-                .statusBarItems(subPageItems(pageSetter: pageSetter))
+                .statusBarItems(subPageItems())
         case .toggles:
             TogglePage()
-                .statusBarItems(subPageItems(pageSetter: pageSetter))
+                .statusBarItems(subPageItems())
         case .textFields:
             TextFieldPage()
-                .statusBarItems(subPageItems(pageSetter: pageSetter))
+                .statusBarItems(subPageItems())
         case .secureFields:
             SecureFieldPage()
-                .statusBarItems(subPageItems(pageSetter: pageSetter))
+                .statusBarItems(subPageItems())
         case .radioButtons:
             RadioButtonPage()
-                .statusBarItems(subPageItems(pageSetter: pageSetter))
+                .statusBarItems(subPageItems())
         case .spinners:
             SpinnersPage()
-                .statusBarItems(subPageItems(pageSetter: pageSetter))
+                .statusBarItems(subPageItems())
         case .lists:
             ListPage()
-                .statusBarItems(subPageItems(pageSetter: pageSetter))
+                .statusBarItems(subPageItems())
         case .tables:
             TablePage()
-                .statusBarItems(subPageItems(pageSetter: pageSetter))
+                .statusBarItems(subPageItems())
         case .sliders:
             SliderPage()
-                .statusBarItems(subPageItems(pageSetter: pageSetter))
+                .statusBarItems(subPageItems())
         case .steppers:
             StepperPage()
-                .statusBarItems(subPageItems(pageSetter: pageSetter))
+                .statusBarItems(subPageItems())
         case .splitView:
             SplitViewPage()
-                .statusBarItems(subPageItems(pageSetter: pageSetter))
+                .statusBarItems(subPageItems())
         case .dogfoodWorkflow:
             TaskWorkflowPage()
         case .imageFile:
@@ -136,11 +125,9 @@ struct ContentView: View {
     }
 
     /// Common status bar items for sub-pages.
-    private func subPageItems(pageSetter: Binding<DemoPage>) -> [any StatusBarItemProtocol] {
+    private func subPageItems() -> [any StatusBarItemProtocol] {
         [
-            StatusBarItem(shortcut: Shortcut.escape, label: "back") { [pageSetter] in
-                pageSetter.wrappedValue = .menu
-            },
+            StatusBarItem(shortcut: Shortcut.escape, label: "back"),
             StatusBarItem(shortcut: Shortcut.arrowsUpDown, label: "scroll"),
         ]
     }
@@ -148,7 +135,7 @@ struct ContentView: View {
     /// Handles quick-jump shortcuts from the menu page.
     ///
     /// - Returns: `true` if the key was consumed, `false` otherwise.
-    private func handleMenuShortcut(_ key: Key) -> Bool {
+    private func handleMenuShortcut(_ key: Key, path: Binding<[DemoPage]>) -> Bool {
         let mapping: [Character: DemoPage] = [
             "1": .textStyles, "2": .colors, "3": .containers,
             "4": .overlays, "5": .layout, "6": .buttons,
@@ -160,7 +147,7 @@ struct ContentView: View {
         ]
 
         if case .character(let ch) = key, let page = mapping[ch] {
-            currentPage = page
+            path.wrappedValue.append(page)
             return true
         }
         return false
