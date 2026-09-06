@@ -265,4 +265,4 @@ sources are vendored as namespaced Swift targets; the package graph contains no 
 
 ## License
 
-This repository has been published under the [MIT](https://mit-license.org) license.
+This repository has been published under the [MIT](https://layered.mit-license.org) license.
