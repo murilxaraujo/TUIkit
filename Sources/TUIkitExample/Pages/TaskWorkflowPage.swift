@@ -21,6 +21,7 @@ private struct ReleaseArtifact: Identifiable, Sendable {
 /// persistent local state, empty/loading/error/success copy, focusable actions,
 /// and contextual shortcut hints in one realistic screen.
 struct TaskWorkflowPage: View {
+    @Environment(\.notificationService) private var notifications
     @State var selectedTask: Int = 0
     @State var draftTitle: String = "Prepare release candidate"
     @State var includeValidation: Bool = true
@@ -149,7 +150,7 @@ struct TaskWorkflowPage: View {
 
                 Button("Mark automated checks", style: .success) {
                     progress = 0.85
-                    NotificationService.current.post("Automated checks recorded")
+                    notifications.post("Automated checks recorded")
                 }
             }
         }
@@ -179,7 +180,7 @@ struct TaskWorkflowPage: View {
                         if includeValidation {
                             showError = false
                             savedMessage = "Saved '\(draftTitle)' for \(releaseOwner)."
-                            NotificationService.current.post("Release task saved")
+                            notifications.post("Release task saved")
                         } else {
                             savedMessage = ""
                             showError = true

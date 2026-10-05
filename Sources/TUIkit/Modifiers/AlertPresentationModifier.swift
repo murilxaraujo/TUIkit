@@ -23,7 +23,7 @@
 ///     Text("Are you sure?")
 /// }
 /// ```
-struct AlertPresentationModifier<Content: View, Actions: View, Message: View>: View {
+public struct AlertPresentationModifier<Content: View, Actions: View, Message: View>: View {
     /// The base content to render.
     let content: Content
 
@@ -48,7 +48,7 @@ struct AlertPresentationModifier<Content: View, Actions: View, Message: View>: V
     /// Alert title color (optional).
     let titleColor: Color?
 
-    var body: Never {
+    public var body: Never {
         fatalError("AlertPresentationModifier renders via Renderable")
     }
 }
@@ -59,7 +59,7 @@ extension AlertPresentationModifier: Renderable {
     /// A stable section ID for alert focus sections.
     private static var alertSectionID: String { "__alert__" }
 
-    func renderToBuffer(context: RenderContext) -> FrameBuffer {
+    public func renderToBuffer(context: RenderContext) -> FrameBuffer {
         // If not presented, just return base content
         guard isPresented.wrappedValue else {
             return TUIkit.renderToBuffer(content, context: context)
@@ -98,19 +98,19 @@ extension AlertPresentationModifier: Renderable {
         // The alert section becomes the active section, so Tab/arrows
         // only navigate within the alert's focusable elements (buttons).
         let sectionID = Self.alertSectionID
-        if context.allowsRenderSideEffects {
+        if context.phase == .render {
             focusManager.registerSection(id: sectionID)
             focusManager.activateSection(id: sectionID)
+        }
 
-            // Register ESC handler to dismiss the alert
-            let isPresentedBinding = isPresented
-            context.environment.keyEventDispatcher!.addHandler { event in
-                if event.key == .escape {
-                    isPresentedBinding.wrappedValue = false
-                    return true
-                }
-                return false
+        // Register ESC handler to dismiss the alert
+        let isPresentedBinding = isPresented
+        context.environment.keyEventDispatcher!.addHandler { event in
+            if event.key == .escape {
+                isPresentedBinding.wrappedValue = false
+                return true
             }
+            return false
         }
 
         // Set the alert section in the context so child focusables

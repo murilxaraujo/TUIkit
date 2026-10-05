@@ -98,8 +98,13 @@ public final class PreferenceStorage: @unchecked Sendable {
     /// Stack of preference values for nested rendering.
     private var stack: [PreferenceValues] = [PreferenceValues()]
 
-    /// Callbacks registered to receive preference changes.
-    private var callbacks: [ObjectIdentifier: [(Any) -> Void]] = [:]
+    /// Monotonic count of preference writes over this storage's lifetime.
+    ///
+    /// Never reset between passes: per-pass scratch storages start at zero,
+    /// so snapshotting the counter around a subtree rendering reveals
+    /// whether that subtree declared any preference (see
+    /// `EnvironmentValues.effectRegistrationProbe`).
+    package private(set) var writeCount = 0
 
     /// Creates a new preference storage.
     public init() {}
@@ -143,44 +148,17 @@ public extension PreferenceStorage {
 
     /// Sets a preference value.
     func setValue<K: PreferenceKey>(_ value: K.Value, forKey key: K.Type) {
+        writeCount += 1
         var currentValues = current
         K.reduce(value: &currentValues[key]) { value }
         current = currentValues
-
-        // Notify callbacks
-        let keyId = ObjectIdentifier(key)
-        if let keyCallbacks = callbacks[keyId] {
-            for callback in keyCallbacks {
-                callback(value)
-            }
-        }
-    }
-
-    /// Registers a callback for preference changes.
-    func onPreferenceChange<K: PreferenceKey>(
-        _ key: K.Type,
-        callback: @escaping (K.Value) -> Void
-    ) {
-        let keyId = ObjectIdentifier(key)
-        let wrappedCallback: (Any) -> Void = { value in
-            if let typedValue = value as? K.Value {
-                callback(typedValue)
-            }
-        }
-
-        if callbacks[keyId] == nil {
-            callbacks[keyId] = []
-        }
-        callbacks[keyId]?.append(wrappedCallback)
     }
 
     /// Prepares preference storage for a new render pass.
     ///
-    /// Clears all accumulated callbacks and resets the value stack
-    /// to a single empty context. Called at the start of each frame
-    /// by `RenderLoop.render()` to prevent callback accumulation.
+    /// Resets the value stack to a single empty context. Called at the
+    /// start of each frame by `RenderLoop.render()`.
     func beginRenderPass() {
-        callbacks.removeAll()
         stack = [PreferenceValues()]
     }
 
@@ -189,6 +167,22 @@ public extension PreferenceStorage {
     /// Called once during app shutdown by `TUIContext.reset()`.
     func reset() {
         stack = [PreferenceValues()]
-        callbacks.removeAll()
+    }
+}
+
+// MARK: - Per-Pass Adoption
+
+package extension PreferenceStorage {
+    /// Replaces the collected values with the ones from a per-pass scratch
+    /// storage.
+    ///
+    /// Preference values do not outlive the frame: the tree re-declares
+    /// them on every traversal. At frame commit the live storage therefore
+    /// adopts the FINAL pass's values wholesale; storages of discarded
+    /// passes are dropped with their pass.
+    ///
+    /// - Parameter collector: The scratch storage of the frame's final pass.
+    func adopt(from collector: PreferenceStorage) {
+        stack = collector.stack
     }
 }

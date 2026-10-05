@@ -185,7 +185,7 @@ public struct NavigationStack<Data, Root: View>: View, Renderable {
         collectionEnvironment.navigationDestinationRegistry = registry
         let collectionContext = context
             .withEnvironment(collectionEnvironment)
-            .withPhase(.semanticCollection)
+            .withPhase(.measure)
             .withBranchIdentity("navigation-semantic-root")
         _ = TUIkit.renderToBuffer(root, context: collectionContext)
 

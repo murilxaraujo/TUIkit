@@ -67,8 +67,12 @@ extension FrameDiffWriter {
         bgCode: String,
         reset: String
     ) -> [String] {
+        let outputWidth = max(0, terminalWidth)
+        let outputHeight = max(0, terminalHeight)
+        let clippedBuffer = buffer.clipped(toWidth: outputWidth, height: outputHeight)
+        let clippedLines = clippedBuffer.lines
         var lines: [String] = []
-        lines.reserveCapacity(terminalHeight)
+        lines.reserveCapacity(outputHeight)
 
         // ESC[2K erases the entire line using the current background color.
         // Placed after bgCode so the erase uses the app background, not the
@@ -77,11 +81,10 @@ extension FrameDiffWriter {
         let eraseLine = "\u{1B}[2K"
         let emptyLine = bgCode + eraseLine + reset
 
-        for row in 0..<terminalHeight {
-            if row < buffer.height {
-                let line = buffer.lines[row]
-                let visibleWidth = line.strippedLength
-                let padding = max(0, terminalWidth - visibleWidth)
+        for row in 0..<outputHeight {
+            if row < clippedBuffer.height {
+                let line = clippedLines[row]
+                let padding = max(0, outputWidth - clippedBuffer.width)
                 let lineWithBg = line.replacingOccurrences(of: reset, with: reset + bgCode)
                 let paddedLine = bgCode + eraseLine + lineWithBg + String(repeating: " ", count: padding) + reset
                 lines.append(paddedLine)
@@ -94,19 +97,19 @@ extension FrameDiffWriter {
     }
 
     /// Compares new content lines with the previous frame and writes only changed lines.
-    func writeContentDiff(newLines: [String], terminal: Terminal, startRow: Int) {
+    func writeContentDiff(newLines: [String], terminal: any TerminalProtocol, startRow: Int) {
         writeDiff(newLines: newLines, previousLines: previousContentLines, terminal: terminal, startRow: startRow)
         previousContentLines = newLines
     }
 
     /// Compares new status bar lines with the previous frame and writes only changed lines.
-    func writeStatusBarDiff(newLines: [String], terminal: Terminal, startRow: Int) {
+    func writeStatusBarDiff(newLines: [String], terminal: any TerminalProtocol, startRow: Int) {
         writeDiff(newLines: newLines, previousLines: previousStatusBarLines, terminal: terminal, startRow: startRow)
         previousStatusBarLines = newLines
     }
 
     /// Compares new app header lines with the previous frame and writes only changed lines.
-    func writeAppHeaderDiff(newLines: [String], terminal: Terminal, startRow: Int) {
+    func writeAppHeaderDiff(newLines: [String], terminal: any TerminalProtocol, startRow: Int) {
         writeDiff(newLines: newLines, previousLines: previousAppHeaderLines, terminal: terminal, startRow: startRow)
         previousAppHeaderLines = newLines
     }
@@ -136,7 +139,12 @@ extension FrameDiffWriter {
 
 private extension FrameDiffWriter {
     /// Writes only the lines that differ between two frames.
-    func writeDiff(newLines: [String], previousLines: [String], terminal: Terminal, startRow: Int) {
+    func writeDiff(
+        newLines: [String],
+        previousLines: [String],
+        terminal: any TerminalProtocol,
+        startRow: Int
+    ) {
         let changedRows = Self.computeChangedRows(newLines: newLines, previousLines: previousLines)
 
         for row in changedRows {

@@ -10,10 +10,10 @@ TUIkit is structured in six layers, each building on the one below. This clean s
 
 ### 1. App Layer
 
-The ``App`` protocol is the entry point. It defines one or more scenes that make up your application. The internal `AppRunner` manages the main run loop, terminal setup, signal handling, and event dispatching.
+The ``App`` protocol is the entry point. It defines one or more scenes that make up your application. The internal `AppRunner` manages the async event loop, terminal setup, signal handling, and event dispatching.
 
 ```
-@main → App → AppRunner → Main Loop
+@main → App → AppRunner → RuntimeEventChannel
 ```
 
 ### 2. View Layer
@@ -43,7 +43,13 @@ This enables spacers, flexible text fields, and proportional sizing. See <doc:La
 
 ### 4. Modifier Layer
 
-View modifiers implement the ``ViewModifier`` protocol. They operate in two phases: `adjustContext(_:)` modifies the ``RenderContext`` before children render (e.g. setting environment values), and `apply(to:context:)` transforms the rendered ``FrameBuffer`` (e.g. adding padding, borders, backgrounds).
+Public view modifiers implement the ``ViewModifier`` protocol with SwiftUI's
+`body(content:)` contract: the modifier composes a replacement view around a
+placeholder for the modified content, and `.modifier(_:)` wraps both in a
+``ModifiedContent`` value. Terminal-specific buffer transformations (padding
+rows, background fills) run behind an internal buffer-modifier layer that
+adjusts the ``RenderContext`` before rendering and transforms the rendered
+``FrameBuffer`` afterwards.
 
 ```swift
 Text("Hello")
@@ -57,24 +63,48 @@ Text("Hello")
 - **``State``**: Mutable per-view state that triggers re-renders
 - **``Binding``**: Two-way connection to a value owned elsewhere
 - **``EnvironmentValues``**: Values propagated down the view tree
-- **``AppStorage``**: Persistent key-value storage via `UserDefaults`
+- **``AppStorage``**: Persistent key-value storage through the app runtime
 
 ### 6. Rendering Layer
 
 The rendering pipeline converts the view tree into terminal output:
 
-1. **View tree traversal**: Each view produces a ``FrameBuffer``
-2. **Modifier application**: Modifiers transform buffers
-3. **ANSI rendering**: The `ANSIRenderer` converts colors and styles to escape codes
-4. **Terminal output**: The ``FrameBuffer`` lines are written to the terminal
+1. **View tree traversal**: Each view produces a ``FrameBuffer`` backed by terminal cells
+2. **Modifier application**: Modifiers transform or style cell surfaces
+3. **Layout and compositing**: Containers position, clip, and layer complete grapheme cells
+4. **Terminal output**: Final rows are encoded into normalized ANSI SGR strings and diffed at the terminal boundary
+
+## Package Boundaries
+
+The framework is split into five Swift library modules. `TUIkitImage` depends on `TUIkitStyling` plus vendored, namespaced pure Swift PNG,
+JPEG, and checksum targets with documented upstream revisions. The package graph has no C or C++ target and no native decoder dependency.
+
+``PlatformImageLoader`` accepts static PNG and JPEG data and produces non-premultiplied 8-bit RGBA pixels. Before a format decoder runs,
+the internal decoding layer validates encoded bytes, dimensions, pixel and frame counts, decompressed samples, and final allocation. File
+and URL loading feed data into that deterministic decoder rather than participating in format parsing.
 
 ## Event Loop
 
-`AppRunner` initializes all subsystems (Terminal, AppState, StatusBarState, AppHeaderState, FocusManager, ThemeManager x2, TUIContext), creates InputHandler and RenderLoop, installs POSIX signal handlers, sets up the terminal (alternate screen, raw mode), starts PulseTimer (100 ms) and CursorTimer (50 ms), registers state and focus observers, and performs an initial render before entering the main loop.
+`AppRunner` owns the terminal session and signal manager plus one `TUIContext`.
+That context owns the application's render state, storage, caches, localization,
+notifications, focus, themes, image loading, and other view-facing services.
+`AppRunner` creates `InputHandler`, `RenderLoop`, and a
+`RuntimeAnimationScheduler`; installs dispatch-backed signal and terminal-input
+sources; registers state and focus observers; and performs an initial render.
+`PulseTimer` and `CursorTimer` are monotonic phase calculators rather than
+background timers.
 
-Each loop iteration checks `shouldShutdown` (set by OS-delivered SIGINT), consumes the resize flag to invalidate the diff cache if SIGWINCH fired, then renders when `consumeRerenderFlag()` or `appState.needsRender` is true. After rendering, it reads up to 128 non-blocking key events per frame and dispatches each through the input handler, including raw-mode Ctrl+C as a global interrupt. A `usleep(22_800)` throttles the loop to approximately 42 FPS. Asynchronous render triggers (timers, @State changes, SIGWINCH, focus changes) feed back into the render decision via `appState.needsRender` or `signals.requestRerender()`.
+The runner then awaits `RuntimeEventChannel`. State invalidations request a
+render, input readiness drains up to 128 key events, SIGWINCH invalidates the
+diff cache, animation deadlines advance visible focus effects, and termination
+events begin cleanup. These paths are serialized on the main actor. With no
+pending event or visible animation deadline, the runtime remains suspended and
+does no periodic work.
 
-@Image(source: "architecture-event-loop.png", alt: "Flowchart of the TUIkit event loop: @main entry initializes subsystems, sets up terminal, starts timers and observers, performs an initial render, then enters the main loop. The loop checks shouldShutdown, consumes the resize flag to invalidate the diff cache, checks rerenderFlag or needsRender to conditionally render, reads key events non-blocking up to 128 per frame, dispatches through the input handler, and sleeps about 23ms. SIGINT and raw Ctrl+C exit to cleanup. Async render triggers from timers, state changes, SIGWINCH, and focus changes feed back into the needsRender check.")
+Signal and input callbacks only enqueue events. Shutdown stops every event
+source, finishes the channel, cancels view tasks through `TUIContext.reset()`,
+and restores raw mode, cursor visibility, and the alternate screen before an
+I/O failure is propagated.
 
 Input dispatch uses a first-consumer-wins model. Layer 0 and Layer 3 are mutually exclusive: when a text input element (TextField/SecureField) is focused, Layer 0 runs and Layer 3 is skipped; otherwise Layer 0 is skipped and Layer 3 runs. Both use `focusManager.dispatchKeyEvent()`, which first delegates to the focused element, then handles Tab/Shift+Tab navigation, then arrow key fallback.
 

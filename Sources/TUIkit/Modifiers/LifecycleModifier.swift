@@ -11,9 +11,6 @@ struct OnAppearModifier<Content: View>: View {
     /// The content view.
     let content: Content
 
-    /// Unique token to track this view's lifecycle.
-    let token: String
-
     /// The action to execute on first appearance.
     let action: () -> Void
 
@@ -24,13 +21,22 @@ struct OnAppearModifier<Content: View>: View {
 
 extension OnAppearModifier: Renderable {
     func renderToBuffer(context: RenderContext) -> FrameBuffer {
-        if context.allowsRenderSideEffects {
-            // Record appearance and execute action if first time
-            _ = context.environment.lifecycle!.recordAppear(token: token, action: action)
+        let scopedContext = context.withIdentityScope("lifecycle.appear")
+        // Lifetime effect (outlives the frame): recorded for the frame
+        // commit; the live path (no pending records) applies it directly.
+        if context.phase == .render {
+            let lifecycle = context.environment.lifecycle!
+            let identity = scopedContext.identity
+            if let pendingEffects = context.environment.pendingFrameEffects {
+                pendingEffects.recordEffect { [action] in
+                    _ = lifecycle.recordAppear(identity: identity, action: action)
+                }
+            } else {
+                _ = lifecycle.recordAppear(identity: identity, action: action)
+            }
         }
 
-        // Render content
-        return TUIkit.renderToBuffer(content, context: context)
+        return TUIkit.renderToBuffer(content, context: scopedContext)
     }
 }
 
@@ -40,9 +46,6 @@ extension OnAppearModifier: Renderable {
 struct OnDisappearModifier<Content: View>: View {
     /// The content view.
     let content: Content
-
-    /// Unique token to track this view's lifecycle.
-    let token: String
 
     /// The action to execute when the view disappears.
     let action: () -> Void
@@ -54,16 +57,24 @@ struct OnDisappearModifier<Content: View>: View {
 
 extension OnDisappearModifier: Renderable {
     func renderToBuffer(context: RenderContext) -> FrameBuffer {
-        if context.allowsRenderSideEffects {
-            // Register the disappear callback
-            context.environment.lifecycle!.registerDisappear(token: token, action: action)
-
-            // Mark as visible in current render
-            _ = context.environment.lifecycle!.recordAppear(token: token, action: {})
+        let scopedContext = context.withIdentityScope("lifecycle.disappear")
+        // Lifetime effect (outlives the frame): recorded for the frame
+        // commit; the live path (no pending records) applies it directly.
+        if context.phase == .render {
+            let lifecycle = context.environment.lifecycle!
+            let identity = scopedContext.identity
+            if let pendingEffects = context.environment.pendingFrameEffects {
+                pendingEffects.recordEffect { [action] in
+                    lifecycle.registerDisappear(identity: identity, action: action)
+                    _ = lifecycle.recordAppear(identity: identity, action: {})
+                }
+            } else {
+                lifecycle.registerDisappear(identity: identity, action: action)
+                _ = lifecycle.recordAppear(identity: identity, action: {})
+            }
         }
 
-        // Render content
-        return TUIkit.renderToBuffer(content, context: context)
+        return TUIkit.renderToBuffer(content, context: scopedContext)
     }
 }
 
@@ -76,11 +87,8 @@ struct TaskModifier<Content: View>: View {
     /// The content view.
     let content: Content
 
-    /// Unique token to track this view's lifecycle.
-    let token: String
-
     /// The async task to execute.
-    let task: @Sendable () async -> Void
+    let task: @isolated(any) @Sendable () async -> Void
 
     /// Task priority.
     let priority: TaskPriority
@@ -92,27 +100,38 @@ struct TaskModifier<Content: View>: View {
 
 extension TaskModifier: Renderable {
     func renderToBuffer(context: RenderContext) -> FrameBuffer {
-        if context.allowsRenderSideEffects {
+        let scopedContext = context.withIdentityScope("lifecycle.task")
+        // Lifetime effect (outlives the frame): recorded for the frame
+        // commit; the live path (no pending records) applies it directly.
+        // A task from a discarded pass is therefore never even started.
+        if context.phase == .render {
             let lifecycle = context.environment.lifecycle!
-
-            // Start task on first appearance
-            let isFirstAppear = !lifecycle.hasAppeared(token: token)
-
-            _ = lifecycle.recordAppear(token: token) {
-                // Only start task on first appear
-            }
-
-            if isFirstAppear {
-                lifecycle.startTask(token: token, priority: priority, operation: task)
-            }
-
-            // Register disappear callback to cancel task
-            lifecycle.registerDisappear(token: token) { [lifecycle] in
-                lifecycle.cancelTask(token: token)
+            let identity = scopedContext.identity
+            if let pendingEffects = context.environment.pendingFrameEffects {
+                pendingEffects.recordEffect { [task, priority] in
+                    lifecycle.updateTask(
+                        identity: identity,
+                        id: MountedTaskID.value,
+                        priority: priority,
+                        operation: task
+                    )
+                }
+            } else {
+                lifecycle.updateTask(
+                    identity: identity,
+                    id: MountedTaskID.value,
+                    priority: priority,
+                    operation: task
+                )
             }
         }
 
-        // Render content
-        return TUIkit.renderToBuffer(content, context: context)
+        return TUIkit.renderToBuffer(content, context: scopedContext)
     }
+}
+
+// MARK: - Task Identity
+
+private enum MountedTaskID: Hashable {
+    case value
 }

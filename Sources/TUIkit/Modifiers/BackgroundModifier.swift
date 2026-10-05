@@ -6,34 +6,37 @@
 
 /// A modifier that fills the background of a view with a color.
 ///
-/// - Important: This is framework infrastructure. Use `.background()` on any
-///   ``View`` instead of instantiating this type directly.
-public struct BackgroundModifier: ViewModifier {
+/// Framework infrastructure behind `.background()`; operates on rendered
+/// buffers through the internal buffer-modifier layer.
+struct BackgroundModifier: BufferViewModifier {
     /// The background color.
     let color: Color
 
-    public func modify(buffer: FrameBuffer, context: RenderContext) -> FrameBuffer {
+    func modify(buffer: FrameBuffer, context: RenderContext) -> FrameBuffer {
         guard !buffer.isEmpty else { return buffer }
 
         let resolvedColor = color.resolve(with: context.environment.palette)
-        let width = buffer.width
-        var lines: [String] = []
-
-        for line in buffer.lines {
-            // Pad the line to full width so background covers everything
-            let paddedLine = line.padToVisibleWidth(width)
-
-            // We need to handle existing ANSI codes in the line
-            // For simplicity, we wrap the whole line with background
-            let colored = applyBackground(to: paddedLine, color: resolvedColor)
-            lines.append(colored)
-        }
-
-        return FrameBuffer(lines: lines)
+        return FrameBuffer(
+            terminalSurface: buffer.terminalSurface.applyingBackground(
+                resolvedColor.terminalBackgroundColor
+            )
+        )
     }
+}
 
-    /// Applies background color to a string, preserving existing formatting.
-    private func applyBackground(to string: String, color: Color) -> String {
-        ANSIRenderer.backgroundCode(for: color) + string + ANSIRenderer.reset
+private extension Color {
+    var terminalBackgroundColor: TerminalColor {
+        switch value {
+        case .standard(let color):
+            .ansi(Int(color.backgroundCode))
+        case .bright(let color):
+            .ansi(Int(color.brightBackgroundCode))
+        case .palette256(let index):
+            .indexed(Int(index))
+        case .rgb(let red, let green, let blue):
+            .rgb(red: Int(red), green: Int(green), blue: Int(blue))
+        case .semantic:
+            preconditionFailure("Semantic color must be resolved before rendering")
+        }
     }
 }

@@ -94,7 +94,7 @@ struct NotificationTests {
         let lines = NotificationTiming.wordWrap(text, maxWidth: 20)
         #expect(lines.count > 1)
         for line in lines {
-            #expect(line.count <= 20)
+            #expect(line.strippedLength <= 20)
         }
     }
 
@@ -102,6 +102,12 @@ struct NotificationTests {
     func wordWrapLongWord() {
         let lines = NotificationTiming.wordWrap("Supercalifragilistic", maxWidth: 10)
         #expect(lines == ["Supercalifragilistic"])
+    }
+
+    @Test("Word wrap measures East Asian text in terminal cells")
+    func wordWrapEastAsianText() {
+        let lines = NotificationTiming.wordWrap("界 界", maxWidth: 4)
+        #expect(lines == ["界", "界"])
     }
 
     @Test("Empty text returns single empty line")
@@ -149,12 +155,17 @@ struct NotificationTests {
 
     @Test("Expired entries are pruned by activeEntries")
     func expiredEntriesPruned() {
-        let service = NotificationService()
-        // Post with a very short duration so it expires almost immediately.
+        let timeSource = NotificationTestTimeSource(now: 100)
+        let service = NotificationService(
+            clock: RuntimeClock { timeSource.now },
+            invalidationSink: nil
+        )
         service.post("Quick", duration: 0.0)
+        #expect(service.activeEntries().count == 1)
 
-        // Wait slightly longer than fade-in + fade-out.
-        Thread.sleep(forTimeInterval: NotificationTiming.fadeInDuration + NotificationTiming.fadeOutDuration + 0.05)
+        timeSource.advance(
+            by: NotificationTiming.fadeInDuration + NotificationTiming.fadeOutDuration + 0.01
+        )
 
         let entries = service.activeEntries()
         #expect(entries.isEmpty)
@@ -229,5 +240,26 @@ struct NotificationTests {
         #expect(joined.contains("Second"))
         // Both notifications should be in the buffer, stacked.
         #expect(buffer.height > 3)
+    }
+}
+
+private final class NotificationTestTimeSource: @unchecked Sendable {
+    private let lock = NSLock()
+    private var currentTime: TimeInterval
+
+    init(now: TimeInterval) {
+        self.currentTime = now
+    }
+
+    var now: TimeInterval {
+        lock.lock()
+        defer { lock.unlock() }
+        return currentTime
+    }
+
+    func advance(by interval: TimeInterval) {
+        lock.lock()
+        currentTime += interval
+        lock.unlock()
     }
 }

@@ -11,26 +11,25 @@ import TUIkitCore
 
 /// Application state that triggers re-renders when modified.
 ///
-/// `AppState` is thread-safe: ``setNeedsRender()`` can be called from any thread
-/// (e.g., from `PulseTimer` on a background queue). Internal state is protected
-/// by an `NSLock`.
+/// `AppState` is thread-safe: ``setNeedsRender()`` can be called from any thread.
+/// Internal state is protected by an `NSLock`.
 ///
 /// The `AppRunner` subscribes to state changes and re-renders when notified.
-/// Property wrappers like ``State`` and ``AppStorage`` access the shared instance
-/// via ``AppState.shared``.
+/// Property wrappers route changes to the runtime-owned instance through
+/// ``RenderInvalidationSink``.
 ///
 /// - Important: This is framework infrastructure. Prefer using ``State`` for reactive state
 ///   management in your views. Direct use of `AppState` is only necessary in advanced scenarios
 ///   where you manage state outside the view hierarchy.
 public final class AppState: Sendable {
-    /// The global shared instance.
-    public static let shared = AppState()
-
     /// Internal state protected by a lock.
     private struct StateData: Sendable {
         var needsRender = false
-        var needsCacheClear = false
+        var invalidatesAllCachedOutput = false
+        var invalidatedSubtrees: Set<ViewIdentity> = []
         var observers: [@Sendable () -> Void] = []
+        var traversalThreadID: ObjectIdentifier?
+        var traversalViolationHandler: (@Sendable (RenderInvalidation) -> Void)?
     }
 
     /// Lock protecting all mutable state.
@@ -52,14 +51,7 @@ public extension AppState {
     /// automatically detects environment changes via `EnvironmentSnapshot`
     /// comparison and clears the cache when needed.
     func setNeedsRender() {
-        let observers = lock.withLock { state -> [@Sendable () -> Void] in
-            state.needsRender = true
-            return state.observers
-        }
-        // Call observers outside the lock to avoid potential deadlocks
-        for observer in observers {
-            observer()
-        }
+        invalidate(.renderOnly)
     }
 
     /// Marks state as changed and requests a full cache clear on next render.
@@ -71,14 +63,7 @@ public extension AppState {
     ///
     /// Thread-safe: can be called from any thread.
     func setNeedsRenderWithCacheClear() {
-        let observers = lock.withLock { state -> [@Sendable () -> Void] in
-            state.needsRender = true
-            state.needsCacheClear = true
-            return state.observers
-        }
-        for observer in observers {
-            observer()
-        }
+        invalidate(.all)
     }
 }
 
@@ -113,73 +98,198 @@ extension AppState {
         }
     }
 
-    /// Consumes and returns the cache-clear flag.
+    /// Consumes pending cache invalidations.
     ///
     /// Called by the render loop at the start of each frame. Returns `true`
-    /// if any `@Observable` property changed since the last render, signaling
-    /// that the render cache should be fully cleared.
-    public func consumeNeedsCacheClear() -> Bool {
+    /// The returned invalidations are applied by the owning runtime on the
+    /// main actor before rendering. Render-only requests are represented by
+    /// an empty array because they do not affect cached output.
+    public func consumePendingCacheInvalidations() -> [RenderInvalidation] {
         lock.withLock { state in
-            let value = state.needsCacheClear
-            state.needsCacheClear = false
-            return value
+            if state.invalidatesAllCachedOutput {
+                state.invalidatesAllCachedOutput = false
+                state.invalidatedSubtrees.removeAll(keepingCapacity: true)
+                return [.all]
+            }
+
+            let invalidations = state.invalidatedSubtrees.map(RenderInvalidation.subtree)
+            state.invalidatedSubtrees.removeAll(keepingCapacity: true)
+            return invalidations
+        }
+    }
+
+    /// Consumes pending invalidations and reports whether a full cache clear was requested.
+    ///
+    /// Prefer ``consumePendingCacheInvalidations()`` when subtree invalidations
+    /// must be preserved.
+    public func consumeNeedsCacheClear() -> Bool {
+        consumePendingCacheInvalidations().contains { invalidation in
+            if case .all = invalidation {
+                return true
+            }
+            return false
+        }
+    }
+
+    /// Clears render flags, pending invalidations, and observers.
+    public func reset() {
+        lock.withLock { state in
+            state.needsRender = false
+            state.invalidatesAllCachedOutput = false
+            state.invalidatedSubtrees.removeAll()
+            state.observers.removeAll()
+            state.traversalThreadID = nil
+        }
+    }
+
+    // MARK: - Traversal Diagnostics
+
+    /// Marks the start of a view-tree traversal window.
+    ///
+    /// Between ``beginTraversal()`` and ``endTraversal()``, invalidations
+    /// arriving **from the traversing thread itself** are unsupported user
+    /// side effects (state mutated while a body evaluates or a view renders)
+    /// and are reported through the traversal-violation handler.
+    /// Invalidations from background tasks remain legitimate and stay
+    /// silent, as do all invalidations outside the window (input handlers,
+    /// committed effect actions, timers).
+    ///
+    /// The window is keyed to the calling thread's identity instead of
+    /// `Thread.isMainThread`, which is not reliable under the Swift
+    /// concurrency runtime on Linux.
+    package func beginTraversal() {
+        let threadID = ObjectIdentifier(Thread.current)
+        lock.withLock { state in
+            state.traversalThreadID = threadID
+        }
+    }
+
+    /// Marks the end of a view-tree traversal window.
+    package func endTraversal() {
+        lock.withLock { state in
+            state.traversalThreadID = nil
+        }
+    }
+
+    /// Installs the handler that reports main-thread invalidations raised
+    /// during a traversal window.
+    ///
+    /// Set once by the owning runtime (`TUIContext`), which routes the
+    /// report into its diagnostics collector.
+    ///
+    /// - Parameter handler: The violation reporter, or `nil` to disable.
+    package func setTraversalViolationHandler(
+        _ handler: (@Sendable (RenderInvalidation) -> Void)?
+    ) {
+        lock.withLock { state in
+            state.traversalViolationHandler = handler
+        }
+    }
+}
+
+// MARK: - Render Invalidation Sink
+
+extension AppState: RenderInvalidationSink {
+    public func invalidate(_ invalidation: RenderInvalidation) {
+        let currentThreadID = ObjectIdentifier(Thread.current)
+
+        let (observers, violationHandler) = lock.withLock { state -> ([@Sendable () -> Void], (@Sendable (RenderInvalidation) -> Void)?) in
+            state.needsRender = true
+
+            switch invalidation {
+            case .renderOnly:
+                break
+            case .subtree(let identity):
+                if !state.invalidatesAllCachedOutput {
+                    state.invalidatedSubtrees.insert(identity)
+                }
+            case .all:
+                state.invalidatesAllCachedOutput = true
+                state.invalidatedSubtrees.removeAll(keepingCapacity: true)
+            }
+
+            let handler = (state.traversalThreadID == currentThreadID)
+                ? state.traversalViolationHandler
+                : nil
+            return (state.observers, handler)
+        }
+
+        // Report and notify outside the lock to avoid potential deadlocks.
+        // A main-thread invalidation inside a traversal window is an
+        // unsupported user side effect; the invalidation itself is still
+        // honored so rendering stays consistent.
+        violationHandler?(invalidation)
+        for observer in observers {
+            observer()
         }
     }
 }
 
 // MARK: - Hydration Context
 
-/// The active render context used by `@State` during self-hydration.
+/// The render context used to bind dynamic properties to runtime storage.
 ///
-/// Set by `renderToBuffer(_:context:)` before evaluating a composite view's `body`,
-/// and cleared immediately after. Provides the view identity and state storage
-/// that `@State.init` needs to retrieve or create persistent state.
-public struct HydrationContext {
+/// Created by `renderToBuffer(_:context:)` after a view reaches its final
+/// structural position and before evaluating that view's `body`.
+public struct HydrationContext: Sendable {
     /// The current view's structural identity.
     public let identity: ViewIdentity
 
     /// The persistent state storage.
     public let storage: StateStorage
 
+    /// The runtime that owns state created in this context.
+    public let invalidationSink: (any RenderInvalidationSink)?
+
     /// Creates a new hydration context.
-    public init(identity: ViewIdentity, storage: StateStorage) {
+    public init(
+        identity: ViewIdentity,
+        storage: StateStorage,
+        invalidationSink: (any RenderInvalidationSink)? = nil
+    ) {
         self.identity = identity
         self.storage = storage
+        self.invalidationSink = invalidationSink
     }
+}
+
+// MARK: - Runtime Dynamic Property
+
+/// Internal binding contract for property wrappers that need their committed
+/// view identity before `body` is evaluated.
+package protocol RuntimeDynamicProperty {
+    /// Binds the property to one stable slot on the final structural identity.
+    func bind(to context: HydrationContext, propertyIndex: Int)
 }
 
 // MARK: - State Registration
 
-/// Framework-internal state for `@State` self-hydration during rendering.
+/// Framework-internal context for dynamic-property and environment evaluation.
 ///
-/// When `renderToBuffer(_:context:)` is about to evaluate a composite view's `body`,
-/// it sets ``activeContext`` and resets ``counter`` to 0. Each `@State.init` that runs
-/// during `body` evaluation checks ``activeContext``:
-///
-/// - **Non-nil:** Claims the next property index from ``counter`` and retrieves a
-///   persistent `StateBox` from `StateStorage`.
-/// - **Nil:** Creates a local `StateBox` (pre-render or outside the render tree).
-///
-/// This is safe because TUIKit runs on a single thread — no concurrent access.
+/// The renderer first reflects the owning view's dynamic properties and binds
+/// them to its final structural identity. Ambient context remains available
+/// while evaluating `body` for environment-backed construction APIs.
 public enum StateRegistration {
-    /// The active hydration context, set during composite view body evaluation.
-    ///
-    /// - Important: Must be set before and cleared after each `body` call.
-    ///   Nested composite views save/restore the previous context.
-    nonisolated(unsafe) public static var activeContext: HydrationContext?
+    /// Dynamically scoped hydration context used by production rendering.
+    @TaskLocal package static var runtimeContext: HydrationContext?
 
-    /// The current property index, incremented by each `@State` during hydration.
-    nonisolated(unsafe) public static var counter: Int = 0
+    /// Dynamically scoped environment used by production rendering.
+    @TaskLocal package static var runtimeEnvironment: EnvironmentValues?
 
-    /// The active environment values, set during composite view body evaluation.
-    ///
-    /// Used by `@Environment` to read environment values during `body` evaluation.
-    /// Set alongside ``activeContext`` in `renderToBuffer(_:context:)`.
-    nonisolated(unsafe) public static var activeEnvironment: EnvironmentValues?
+    /// Current dynamically scoped context.
+    package static var currentContext: HydrationContext? {
+        runtimeContext
+    }
+
+    /// Current dynamically scoped environment.
+    package static var currentEnvironment: EnvironmentValues? {
+        runtimeEnvironment
+    }
+
     /// Evaluates a closure with a hydration context active.
     ///
-    /// Sets up `activeContext`, `counter`, and `activeEnvironment` before
-    /// calling the closure, then restores the previous state. This pattern
+    /// Installs task-local runtime context and environment values while
+    /// calling the closure, then restores the enclosing scope. This pattern
     /// is needed whenever `view.body` is evaluated outside the normal
     /// `renderToBuffer` dispatch (e.g., in `measureChild`).
     ///
@@ -191,24 +301,92 @@ public enum StateRegistration {
         context: RenderContext,
         _ block: () -> R
     ) -> R {
-        let previousContext = activeContext
-        let previousCounter = counter
-        let previousEnvironment = activeEnvironment
+        withHydration(owner: nil, context: context, block)
+    }
 
-        activeContext = HydrationContext(
-            identity: context.identity,
-            storage: context.environment.stateStorage!
-        )
-        counter = 0
-        activeEnvironment = context.environment
+    /// Evaluates a view or app body after binding its dynamic properties to
+    /// the final structural identity supplied by the renderer.
+    package static func withHydration<Owner, R>(
+        of owner: Owner,
+        context: RenderContext,
+        _ block: () -> R
+    ) -> R {
+        withHydration(owner: owner, context: context, block)
+    }
 
-        let result = block()
+    /// Binds dynamic-property fields for tests and specialized runtime paths.
+    ///
+    /// Walks the owner's stored properties depth-first: framework wrappers
+    /// bind directly, and user-defined ``DynamicProperty`` values are
+    /// descended into so their nested wrappers hydrate with stable,
+    /// declaration-ordered property indices. After a dynamic property's
+    /// subtree is bound, its `update()` runs once.
+    package static func bindDynamicProperties<Owner>(
+        in owner: Owner,
+        context: HydrationContext
+    ) {
+        var propertyIndex = 0
+        bindDynamicProperties(in: owner, context: context, propertyIndex: &propertyIndex)
+    }
 
-        activeContext = previousContext
-        counter = previousCounter
-        activeEnvironment = previousEnvironment
+    private static func bindDynamicProperties(
+        in owner: Any,
+        context: HydrationContext,
+        propertyIndex: inout Int
+    ) {
+        var mirror: Mirror? = Mirror(reflecting: owner)
 
-        return result
+        while let currentMirror = mirror {
+            for child in currentMirror.children {
+                if let property = child.value as? any RuntimeDynamicProperty {
+                    property.bind(to: context, propertyIndex: propertyIndex)
+                    propertyIndex += 1
+                } else if child.value is any DynamicProperty {
+                    bindDynamicProperties(
+                        in: child.value,
+                        context: context,
+                        propertyIndex: &propertyIndex
+                    )
+                }
+
+                if let dynamicProperty = child.value as? any DynamicProperty {
+                    runUpdate(on: dynamicProperty)
+                }
+            }
+            mirror = currentMirror.superclassMirror
+        }
+    }
+
+    /// Runs `update()` on a copy of the property.
+    ///
+    /// Reflection cannot write back into a value-typed owner; framework
+    /// wrappers persist their effects through reference-backed storage.
+    private static func runUpdate<P: DynamicProperty>(on property: P) {
+        var copy = property
+        copy.update()
+    }
+
+    private static func withHydration<R>(
+        owner: Any?,
+        context: RenderContext,
+        _ block: () -> R
+    ) -> R {
+        let hydrationContext = context.environment.stateStorage.map {
+            HydrationContext(
+                identity: context.identity,
+                storage: $0,
+                invalidationSink: context.environment.renderInvalidationSink
+            )
+        }
+
+        return $runtimeContext.withValue(hydrationContext) {
+            $runtimeEnvironment.withValue(context.environment) {
+                if let owner, let hydrationContext {
+                    bindDynamicProperties(in: owner, context: hydrationContext)
+                }
+                return block()
+            }
+        }
     }
 }
 
@@ -316,28 +494,19 @@ public struct Binding<Value> {
 ///
 /// # Render Integration
 ///
-/// `@State` uses **self-hydrating init**: when `@State.init` runs while a
-/// render context is active (`StateRegistration.activeContext`), it claims
-/// the next property index and retrieves (or creates) a persistent `StateBox`
-/// from `StateStorage`.
+/// Immediately before a view's `body` is evaluated, the renderer binds each
+/// `@State` property to a persistent `StateBox` using the view's final
+/// structural identity and the property's declaration slot.
 ///
-/// The render loop sets the active context **before** evaluating `App.body`,
-/// so views constructed inside `WindowGroup { ... }` closures self-hydrate
-/// immediately. For nested composite views, `renderToBuffer(_:context:)`
-/// saves and restores the context around each `body` evaluation.
+/// Binding after structural traversal prevents a child constructed in its
+/// parent's body from claiming the parent's identity. State therefore survives
+/// reconstruction while independent siblings retain independent storage.
 ///
-/// State is keyed by `ViewIdentity` and property index, ensuring values
-/// survive view reconstruction across render passes.
-///
-/// Mutations signal re-renders through `AppState.shared`.
+/// Mutations signal re-renders through the owning runtime's invalidation sink.
 @propertyWrapper
 public struct State<Value> {
-    /// The backing storage box for this state value.
-    ///
-    /// Either a local box (when no render context is active) or a persistent
-    /// box from `StateStorage` (during rendering). Since `StateBox` is a
-    /// reference type, mutations through `nonmutating set` are visible everywhere.
-    private let box: StateBox<Value>
+    /// Stable indirection that can adopt the box for the committed view identity.
+    private let location: StateLocation<Value>
 
     /// The default value provided at init time.
     ///
@@ -347,36 +516,89 @@ public struct State<Value> {
 
     /// The current state value.
     public var wrappedValue: Value {
-        get { box.value }
-        nonmutating set { box.value = newValue }
+        get { location.box.value }
+        nonmutating set {
+            location.box.value = newValue
+        }
     }
 
     /// A binding to the state value.
     public var projectedValue: Binding<Value> {
-        Binding(
-            get: { self.box.value },
-            set: { self.box.value = $0 }
+        return Binding(
+            get: { self.location.box.value },
+            set: { self.location.box.value = $0 }
         )
     }
 
     /// Creates a state with an initial value.
     ///
-    /// If a render context is active (`StateRegistration.activeContext`),
-    /// the state self-hydrates: it claims a property index and retrieves
-    /// or creates a persistent `StateBox` from `StateStorage`.
-    ///
-    /// Otherwise, a local `StateBox` is created with the default value.
+    /// The wrapper starts with local storage. The renderer replaces that storage
+    /// with the persistent box for the committed view identity before `body`
+    /// evaluation.
     ///
     /// - Parameter wrappedValue: The initial/default value.
     public init(wrappedValue: Value) {
         self.defaultValue = wrappedValue
-        if let context = StateRegistration.activeContext {
-            let index = StateRegistration.counter
-            StateRegistration.counter += 1
-            let key = StateStorage.StateKey(identity: context.identity, propertyIndex: index)
-            self.box = context.storage.storage(for: key, default: wrappedValue)
-        } else {
-            self.box = StateBox(wrappedValue)
+        self.location = StateLocation(defaultValue: wrappedValue)
+    }
+
+    /// Creates a state with an initial value.
+    ///
+    /// SwiftUI-compatible spelling of ``init(wrappedValue:)``.
+    ///
+    /// - Parameter value: The initial/default value.
+    public init(initialValue value: Value) {
+        self.init(wrappedValue: value)
+    }
+}
+
+extension State where Value: ExpressibleByNilLiteral {
+    /// Creates state without an initial value, starting at `nil`.
+    ///
+    /// Matches SwiftUI's empty initializer for optional state values.
+    public init() {
+        self.init(wrappedValue: nil)
+    }
+}
+
+// MARK: - Dynamic Property Conformance
+
+extension State: DynamicProperty {}
+
+extension Binding: DynamicProperty {}
+
+// MARK: - Runtime Binding
+
+extension State: RuntimeDynamicProperty {
+    package func bind(to context: HydrationContext, propertyIndex: Int) {
+        location.bind(to: context, propertyIndex: propertyIndex)
+    }
+}
+
+// MARK: - State Location
+
+private final class StateLocation<Value> {
+    let defaultValue: Value
+    var box: StateBox<Value>
+    private weak var storage: StateStorage?
+    private var key: StateStorage.StateKey?
+
+    init(defaultValue: Value) {
+        self.defaultValue = defaultValue
+        self.box = StateBox(defaultValue)
+    }
+
+    func bind(to context: HydrationContext, propertyIndex: Int) {
+        let key = StateStorage.StateKey(
+            identity: context.identity,
+            propertyIndex: propertyIndex
+        )
+
+        if self.key != key || storage !== context.storage {
+            box = context.storage.storage(for: key, default: defaultValue)
+            storage = context.storage
+            self.key = key
         }
+        box.bind(identity: context.identity, invalidationSink: context.invalidationSink)
     }
 }

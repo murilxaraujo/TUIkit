@@ -18,7 +18,7 @@ import TUIkitCore
 /// view tree has been rendered into a ``FrameBuffer``.
 ///
 /// - Important: This is framework infrastructure passed to
-///   ``ViewModifier/modify(buffer:context:)``. Most developers only need
+///   the internal buffer-modifier layer. Most developers only need
 ///   ``availableWidth``, ``availableHeight``, and ``environment``.
 public struct RenderContext {
     /// The available width in characters.
@@ -51,18 +51,25 @@ public struct RenderContext {
     /// the available height or shrink to fit their content.
     public var hasExplicitHeight: Bool = false
 
-    /// Whether this is a measurement pass (no side-effects should occur).
+    /// The evaluation phase of the current render pass.
     ///
-    /// Set to true during two-pass layout when measuring non-Layoutable views.
-    /// Views should skip side-effects like focus registration when this is true.
-    public var isMeasuring: Bool = false
+    /// Defaults to ``RenderPhase/render``. Layout code switches to
+    /// ``RenderPhase/measure`` before sizing traversals so that effect sites
+    /// can tell sizing work apart from output work. See ``RenderPhase`` for
+    /// the invariants of each phase and the effect classification rule.
+    public var phase: RenderPhase = .render
 
-    /// The current view evaluation phase.
-    ///
-    /// Defaults to ``ViewEvaluationPhase/render``. Semantic collection passes
-    /// use ``ViewEvaluationPhase/semanticCollection`` so modifiers can collect
-    /// declarations without registering live input/focus/status side effects.
-    public var phase: ViewEvaluationPhase = .render
+    /// Whether this traversal is for measurement rather than a live candidate.
+    public var isMeasuring: Bool {
+        phase == .measure
+    }
+
+    /// Creates a context that evaluates a subtree in a specified render phase.
+    public func withPhase(_ phase: RenderPhase) -> Self {
+        var copy = self
+        copy.phase = phase
+        return copy
+    }
 
     /// Whether the context is in the live render phase and may perform
     /// side-effecting registrations for input, focus, lifecycle, and status UI.
@@ -99,19 +106,6 @@ public struct RenderContext {
         return copy
     }
 
-    /// Creates a new context with a different evaluation phase.
-    ///
-    /// - Parameter phase: The phase to use while evaluating a subtree.
-    /// - Returns: A new RenderContext with the updated phase.
-    public func withPhase(_ phase: ViewEvaluationPhase) -> Self {
-        var copy = self
-        copy.phase = phase
-        if phase != .render {
-            copy.isMeasuring = true
-        }
-        return copy
-    }
-
     /// Creates a new context with a child identity for the given type and index.
     ///
     /// Used by container views (`TupleView`, `ViewArray`) to assign
@@ -142,13 +136,38 @@ public struct RenderContext {
 
     /// Creates a new context with a branch identity.
     ///
-    /// Used by `ConditionalView` to distinguish between if/else branches.
+    /// Used by `_ConditionalContent` to distinguish between if/else branches.
     ///
     /// - Parameter label: The branch label (`"true"` or `"false"`).
     /// - Returns: A new RenderContext with the branch identity.
     public func withBranchIdentity(_ label: String) -> Self {
         var copy = self
         copy.identity = identity.branch(label)
+        return copy
+    }
+
+    /// Creates a new context for a stable runtime slot below this view.
+    ///
+    /// - Parameter scope: Framework-defined modifier or effect scope.
+    /// - Returns: A new context with the scoped identity.
+    package func withIdentityScope(_ scope: String) -> Self {
+        var copy = self
+        copy.identity = identity.scoped(scope)
+        return copy
+    }
+
+    /// Creates a new context for a child identified by an explicit key.
+    ///
+    /// Keyed child paths do not depend on sibling position, allowing state and
+    /// runtime records to follow a child across collection reorder operations.
+    ///
+    /// - Parameters:
+    ///   - type: The child view's type.
+    ///   - key: The child's explicit collection key.
+    /// - Returns: A new context with the keyed child identity.
+    package func withKeyedChildIdentity<V, ID: Hashable>(type: V.Type, key: ID) -> Self {
+        var copy = self
+        copy.identity = identity.keyedChild(type: type, key: key)
         return copy
     }
 

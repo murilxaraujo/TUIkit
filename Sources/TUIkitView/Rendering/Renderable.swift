@@ -28,10 +28,10 @@ import TUIkitCore
 ///
 /// - **Leaf views**: `Text`, `EmptyView`, `Spacer`, `Divider`
 /// - **Layout containers**: `VStack`, `HStack`, `ZStack`
-/// - **ViewBuilder glue**: `TupleView`, `ConditionalView`, `ViewArray`
+/// - **ViewBuilder glue**: `TupleView`, `_ConditionalContent`, `ViewArray`
 /// - **Interactive views**: `Button`, `ButtonRow`, `Menu`, `StatusBar`
 /// - **Containers**: `Panel`, `ContainerView`, `Alert`, `Dialog`, `Card`
-/// - **Modifiers**: `ModifiedView`, `DimmedModifier`, etc.
+/// - **Modifiers**: `BufferModifiedView`, `DimmedModifier`, etc.
 ///
 /// All of these declare `body: Never` (which `fatalError`s) because
 /// their rendering is fully handled by `Renderable`.
@@ -165,30 +165,48 @@ public func renderToBuffer<V: View>(_ view: V, context: RenderContext) -> FrameB
         return renderable.renderToBuffer(context: context)
     }
 
-    // Priority 2: Composite view — set up hydration context and recurse into body.
+    // Priority 2: Composite view — bind dynamic properties and recurse into body.
     //
-    // Before evaluating `body`, we activate the hydration context so that any
-    // @State properties created during body evaluation self-hydrate from StateStorage.
-    //
-    // For the view's OWN @State properties: these were already hydrated when the
-    // view was constructed (either via self-hydrating init if activeContext was set,
-    // or via the parent's body evaluation context). The context here is for CHILDREN
-    // that will be constructed inside this view's body.
+    // The owning view's dynamic properties bind at its final structural identity
+    // before body evaluation. Ambient environment context remains active while
+    // child values are constructed inside the body.
     if V.Body.self != Never.self {
         let childContext = context.withChildIdentity(type: V.Body.self)
+        let invalidationSink = context.environment.renderInvalidationSink
+        let pendingEffects = context.environment.pendingFrameEffects
 
         // Wrap body evaluation in observation tracking so that any @Observable
         // property accessed during body triggers a re-render when mutated.
-        let body = StateRegistration.withHydration(context: context) {
-            withObservationTracking {
+        // Sizing traversals evaluate the body plainly: a measure pass must
+        // not register invalidation callbacks for trees that may never
+        // become visible.
+        let body = StateRegistration.withHydration(of: view, context: context) {
+            if context.phase == .measure {
                 view.body
-            } onChange: {
-                AppState.shared.setNeedsRenderWithCacheClear()
+            } else if let observationRegistry = context.environment.observationRegistry {
+                observationRegistry.track(
+                    identity: context.identity,
+                    invalidationSink: invalidationSink
+                ) {
+                    view.body
+                }
+            } else {
+                withObservationTracking {
+                    view.body
+                } onChange: {
+                    invalidationSink?.invalidate(.all)
+                }
             }
         }
 
-        if context.allowsRenderSideEffects {
-            context.environment.stateStorage!.markActive(context.identity)
+        // GC liveness is a lifetime effect: inside a RenderLoop pass it is
+        // collected per pass and only the FINAL pass's set reaches the
+        // managers at frame commit. The live path marks directly.
+        if let pendingEffects {
+            pendingEffects.markActive(context.identity)
+        } else {
+            context.environment.stateStorage?.markActive(context.identity)
+            context.environment.observationRegistry?.markActive(context.identity)
         }
 
         return renderToBuffer(body, context: childContext)
