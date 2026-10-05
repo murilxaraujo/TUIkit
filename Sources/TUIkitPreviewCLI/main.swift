@@ -69,62 +69,74 @@ struct PreviewCLIOptions: Equatable {
     var help = false
 
     init(arguments: [String]) throws {
-        var args = arguments
-        if args.isEmpty {
-            // Default run mode; config may supply target/defaultPreview.
-        }
-        if args.contains("--help") || args.contains("-h") {
+        if arguments.contains("--help") || arguments.contains("-h") {
             help = true
             return
         }
 
-        if args.removeAllOccurrences(of: "--watch") {
-            guard !args.isEmpty else { throw PreviewCLIError.message("--watch requires a command") }
-            mode = .compatibility(command: args)
+        var parsedArguments = arguments
+        if parsedArguments.removeAllOccurrences(of: "--watch") {
+            guard !parsedArguments.isEmpty else { throw PreviewCLIError.message("--watch requires a command") }
+            mode = .compatibility(command: parsedArguments)
             watch = true
             return
         }
 
-        if args.first == "list" {
+        if parsedArguments.first == "list" {
             mode = .list
-            args.removeFirst()
+            parsedArguments.removeFirst()
         }
 
-        var iterator = args.makeIterator()
+        try parseOptions(parsedArguments)
+        applyConfiguration()
+    }
+
+    private mutating func parseOptions(_ arguments: [String]) throws {
+        var iterator = arguments.makeIterator()
         while let arg = iterator.next() {
-            switch arg {
-            case "--":
-                continue
-            case "list":
-                mode = .list
-                watch = false
-            case "--package-path":
-                packagePath = try iterator.requiredValue(after: arg)
-            case "--target":
-                target = try iterator.requiredValue(after: arg)
-            case "--preview", "-p":
-                preview = try iterator.requiredValue(after: arg)
-            case "--size":
-                size = try iterator.requiredValue(after: arg)
-            case "--theme":
-                theme = try iterator.requiredValue(after: arg)
-            case "--configuration", "-c":
-                configuration = try iterator.requiredValue(after: arg)
-            case "--no-watch":
-                watch = false
-            case "--verbose":
-                verbose = true
-            default:
-                if target == nil {
-                    target = arg
-                } else if preview == nil {
-                    preview = arg
-                } else {
-                    throw PreviewCLIError.message("unexpected argument '\(arg)'")
-                }
-            }
+            try parseOption(arg, iterator: &iterator)
         }
+    }
 
+    private mutating func parseOption(_ argument: String, iterator: inout IndexingIterator<[String]>) throws {
+        switch argument {
+        case "--":
+            break
+        case "list":
+            mode = .list
+            watch = false
+        case "--package-path":
+            packagePath = try iterator.requiredValue(after: argument)
+        case "--target":
+            target = try iterator.requiredValue(after: argument)
+        case "--preview", "-p":
+            preview = try iterator.requiredValue(after: argument)
+        case "--size":
+            size = try iterator.requiredValue(after: argument)
+        case "--theme":
+            theme = try iterator.requiredValue(after: argument)
+        case "--configuration", "-c":
+            configuration = try iterator.requiredValue(after: argument)
+        case "--no-watch":
+            watch = false
+        case "--verbose":
+            verbose = true
+        default:
+            try assignPositionalArgument(argument)
+        }
+    }
+
+    private mutating func assignPositionalArgument(_ argument: String) throws {
+        if target == nil {
+            target = argument
+        } else if preview == nil {
+            preview = argument
+        } else {
+            throw PreviewCLIError.message("unexpected argument '\(argument)'")
+        }
+    }
+
+    private mutating func applyConfiguration() {
         let config = PreviewConfig.load(packagePath: packagePath)
         target = target ?? config.target
         preview = preview ?? config.defaultPreview

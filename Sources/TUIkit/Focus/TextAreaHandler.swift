@@ -58,90 +58,94 @@ final class TextAreaHandler: Focusable {
 
 extension TextAreaHandler {
     func handleKeyEvent(_ event: KeyEvent) -> Bool {
+        if case .character(let character) = event.key {
+            return handleCharacter(character, isControlPressed: event.ctrl)
+        }
+
+        switch event.key {
+        case .space, .enter, .paste, .backspace, .delete:
+            return handleEditingKey(event)
+        case .left, .right, .up, .down, .home, .end, .pageUp, .pageDown:
+            return handleCursorKey(event.key)
+        default:
+            return false
+        }
+    }
+
+    private func handleEditingKey(_ event: KeyEvent) -> Bool {
         switch event.key {
         case .space:
             insertText(" ")
-            return true
-
-        case .character(let char):
-            if event.ctrl {
-                switch char {
-                case "a", "A":
-                    cursorPosition = 0
-                    preferredColumn = nil
-                    return true
-                case "e", "E":
-                    cursorPosition = text.wrappedValue.count
-                    preferredColumn = nil
-                    return true
-                case "z", "Z":
-                    undo()
-                    return true
-                default:
-                    return false
-                }
-            }
-
-            if char.isLetter || char.isNumber || char.isPunctuation ||
-                char.isSymbol || char.isWhitespace
-            {
-                insertText(String(char))
-                return true
-            }
-            return false
-
         case .enter:
             if let onSubmit, !event.shift {
                 onSubmit()
             } else {
                 insertText("\n")
             }
-            return true
-
         case .paste(let pastedText):
             insertText(pastedText.normalizedNewlines())
-            return true
-
         case .backspace:
             deleteBackward()
-            return true
-
         case .delete:
             deleteForward()
-            return true
+        default:
+            return false
+        }
+        return true
+    }
 
+    private func handleCursorKey(_ key: Key) -> Bool {
+        switch key {
         case .left:
             moveCursorLeft()
-            return true
-
         case .right:
             moveCursorRight()
-            return true
-
         case .up:
             moveCursorUp()
-            return true
-
         case .down:
             moveCursorDown()
-            return true
-
         case .home:
             moveCursorToLineStart()
-            return true
-
         case .end:
             moveCursorToLineEnd()
-            return true
-
         case .pageUp:
             moveCursorByLines(-10)
-            return true
-
         case .pageDown:
             moveCursorByLines(10)
-            return true
+        default:
+            return false
+        }
+        return true
+    }
 
+    private func handleCharacter(_ character: Character, isControlPressed: Bool) -> Bool {
+        if isControlPressed {
+            return handleControlCharacter(character)
+        }
+
+        guard character.isLetter || character.isNumber || character.isPunctuation ||
+            character.isSymbol || character.isWhitespace
+        else {
+            return false
+        }
+
+        insertText(String(character))
+        return true
+    }
+
+    private func handleControlCharacter(_ character: Character) -> Bool {
+        switch character {
+        case "a", "A":
+            cursorPosition = 0
+            preferredColumn = nil
+            return true
+        case "e", "E":
+            cursorPosition = text.wrappedValue.count
+            preferredColumn = nil
+            return true
+        case "z", "Z":
+            undo()
+            return true
         default:
             return false
         }

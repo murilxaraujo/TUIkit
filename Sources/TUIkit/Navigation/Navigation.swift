@@ -32,9 +32,9 @@ public struct NavigationPath: Equatable, @unchecked Sendable {
         elements.removeLast()
     }
 
-    public mutating func removeLast(_ k: Int) {
-        guard k > 0 else { return }
-        elements.removeLast(min(k, elements.count))
+    public mutating func removeLast(_ count: Int) {
+        guard count > 0 else { return }
+        elements.removeLast(min(count, elements.count))
     }
 
     var lastElement: AnyHashable? { elements.last }
@@ -66,7 +66,7 @@ public final class NavigationDestinationRegistry: @unchecked Sendable {
     }
 
     public func resolve(_ value: AnyHashable) -> AnyView? {
-        if let explicit = value.base as? _ExplicitNavigationDestination {
+        if let explicit = value.base as? ExplicitNavigationDestination {
             return explicit.view
         }
         return builders[ObjectIdentifier(type(of: value.base))]?(value)
@@ -204,7 +204,7 @@ public struct NavigationStack<Data, Root: View>: View, Renderable {
             let box: StateBox<NavigationPath> = stateStorage.storage(for: key, default: NavigationPath())
             topValue = box.value.lastElement
             appendValue = { box.value.append($0) }
-            appendExplicit = { box.value.append(_ExplicitNavigationDestination(view: $0)) }
+            appendExplicit = { box.value.append(ExplicitNavigationDestination(view: $0)) }
             popValue = {
                 guard !box.value.isEmpty else { return false }
                 box.value.removeLast()
@@ -213,7 +213,7 @@ public struct NavigationStack<Data, Root: View>: View, Renderable {
         case .navigationPath(let path):
             topValue = path.wrappedValue.lastElement
             appendValue = { path.wrappedValue.append($0) }
-            appendExplicit = { path.wrappedValue.append(_ExplicitNavigationDestination(view: $0)) }
+            appendExplicit = { path.wrappedValue.append(ExplicitNavigationDestination(view: $0)) }
             popValue = {
                 guard !path.wrappedValue.isEmpty else { return false }
                 path.wrappedValue.removeLast()
@@ -240,7 +240,8 @@ public struct NavigationStack<Data, Root: View>: View, Renderable {
 
         let content: FrameBuffer
         if let topValue {
-            let destinationContext = liveContext.withBranchIdentity("navigation-destination-\(String(describing: type(of: topValue.base)))-\(String(describing: topValue.base))")
+            let destinationIdentity = "navigation-destination-\(String(describing: type(of: topValue.base)))-\(String(describing: topValue.base))"
+            let destinationContext = liveContext.withBranchIdentity(destinationIdentity)
             let destinationView = registry.resolve(topValue) ?? AnyView(missingDestinationView(for: topValue))
             content = TUIkit.renderToBuffer(
                 destinationView,
@@ -275,7 +276,7 @@ public struct NavigationStack<Data, Root: View>: View, Renderable {
 
 // MARK: - NavigationLink
 
-struct _ExplicitNavigationDestination: Hashable, @unchecked Sendable {
+struct ExplicitNavigationDestination: Hashable, @unchecked Sendable {
     let id = UUID()
     let view: AnyView
 
