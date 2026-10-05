@@ -16,12 +16,12 @@ trap cleanup EXIT
 
 mkdir -p "$PACKAGE_REPOSITORY" "$CONSUMER_DIR/Sources/Consumer"
 cp "$PROJECT_DIR/Package.swift" "$PROJECT_DIR/Package.resolved" "$PACKAGE_REPOSITORY/"
-cp -R "$PROJECT_DIR/Plugins" "$PROJECT_DIR/Sources" "$PROJECT_DIR/Tests" "$PROJECT_DIR/Vendor" "$PACKAGE_REPOSITORY/"
+cp -R "$PROJECT_DIR/Sources" "$PROJECT_DIR/Tests" "$PROJECT_DIR/Vendor" "$PACKAGE_REPOSITORY/"
 
 git -C "$PACKAGE_REPOSITORY" init --quiet
 git -C "$PACKAGE_REPOSITORY" config user.name "TUIkit Consumer Gate"
 git -C "$PACKAGE_REPOSITORY" config user.email "consumer-gate@localhost"
-git -C "$PACKAGE_REPOSITORY" add Package.swift Package.resolved Plugins Sources Tests Vendor
+git -C "$PACKAGE_REPOSITORY" add Package.swift Package.resolved Sources Tests Vendor
 git -C "$PACKAGE_REPOSITORY" commit --quiet -m "Test versioned package"
 git -C "$PACKAGE_REPOSITORY" tag 1.0.0
 

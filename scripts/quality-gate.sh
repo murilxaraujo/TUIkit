@@ -104,7 +104,6 @@ TEST_COUNT="$(
         --expected-test-target TUIkitStylingTests \
         --expected-test-target TUIkitViewTests \
         --expected-test-target TUIkitImageTests \
-        --expected-test-target TUIkitTests \
-        --expected-test-target TUIkitPreviewTests
+        --expected-test-target TUIkitTests
 )"
 echo "Quality gate passed with $TEST_COUNT discovered tests"
