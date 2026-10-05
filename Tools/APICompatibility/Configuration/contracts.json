@@ -224,10 +224,9 @@
     {
       "compile" : {
         "expectation" : {
-          "expectedDiagnosticSubstring" : "cannot find 'NavigationStack' in scope",
-          "outcome" : "fails"
+          "outcome" : "succeeds"
         },
-        "fixture" : "NavigationNegative.swift"
+        "fixture" : "NavigationPositive.swift"
       },
       "id" : "compile.issue-31",
       "kind" : "compile"
