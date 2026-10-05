@@ -48,6 +48,7 @@ struct FocusRegistration {
     ///   - defaultPrefix: The prefix for auto-generated focusIDs (e.g. `"button"`).
     ///   - focusIDPropertyIndex: The `StateStorage` property index for persisting the focusID.
     /// - Returns: A `FocusRegistration` with the persisted focusID and focus state.
+    @MainActor
     static func resolve(
         context: RenderContext,
         handler: Focusable,
@@ -64,7 +65,7 @@ struct FocusRegistration {
 
         register(context: context, handler: handler)
 
-        let isFocused = context.allowsRenderSideEffects ? context.environment.focusManager.isFocused(id: persistedFocusID) : false
+        let isFocused = context.phase == .render && context.environment.focusManager.isFocused(id: persistedFocusID)
 
         return Self(persistedFocusID: persistedFocusID, isFocused: isFocused)
     }
@@ -103,10 +104,17 @@ struct FocusRegistration {
     /// - Parameters:
     ///   - context: The current render context.
     ///   - handler: The focusable handler to register.
+    @MainActor
     static func register(context: RenderContext, handler: Focusable) {
-        guard context.allowsRenderSideEffects else { return }
+        guard context.phase == .render else { return }
         context.environment.focusManager.register(handler, inSection: context.environment.activeFocusSectionID)
-        context.environment.stateStorage!.markActive(context.identity)
+        // Keep the persisted focusID alive through GC (per pass in a
+        // RenderLoop frame, directly on the live path).
+        if let pendingEffects = context.environment.pendingFrameEffects {
+            pendingEffects.markActive(context.identity)
+        } else {
+            context.environment.stateStorage!.markActive(context.identity)
+        }
     }
 
     /// Determines whether the given focusID currently has focus.
@@ -118,6 +126,6 @@ struct FocusRegistration {
     ///   - focusID: The focusID to check.
     /// - Returns: `true` if the view is focused.
     static func isFocused(context: RenderContext, focusID: String) -> Bool {
-        context.allowsRenderSideEffects ? context.environment.focusManager.isFocused(id: focusID) : false
+        context.phase == .render && context.environment.focusManager.isFocused(id: focusID)
     }
 }

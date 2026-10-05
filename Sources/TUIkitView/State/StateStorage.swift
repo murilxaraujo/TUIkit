@@ -4,7 +4,6 @@
 //  Created by LAYERED.work
 //  License: MIT
 
-import Foundation
 import TUIkitCore
 
 // MARK: - State Storage
@@ -26,17 +25,9 @@ import TUIkitCore
 ///
 /// ## Thread Safety
 ///
-/// `StateStorage` can be touched by the render loop and by background `.task`
-/// work that publishes results through `@State`/`StateBox`. Mutable storage is
-/// protected by a lock so background jobs do not have to run on the interaction
-/// loop.
+/// `StateStorage` is accessed only from the main thread (TUIKit's single-threaded
+/// event loop). No locking is required.
 public final class StateStorage: @unchecked Sendable {
-
-    /// Lock protecting persisted values, tracking dictionaries, and render-pass state.
-    private let lock = NSLock()
-
-    /// Render cache owned by the same runtime context.
-    private weak var renderCache: RenderCache?
 
     // MARK: - State Key
 
@@ -77,20 +68,22 @@ public final class StateStorage: @unchecked Sendable {
     /// Identities seen during the current render pass (for garbage collection).
     private var activeIdentities: Set<ViewIdentity> = []
 
+    /// Runtime receiving invalidations from state boxes created by this storage.
+    private var invalidationSink: (any RenderInvalidationSink)?
+
     /// Creates an empty state storage.
     ///
-    /// - Parameter renderCache: Cache to invalidate when state changes. Defaults
-    ///   to the shared compatibility cache for standalone/test usage; app
-    ///   runtimes inject their own per-context cache.
-    public init(renderCache: RenderCache = .shared) {
-        self.renderCache = renderCache
+    /// - Parameter invalidationSink: Runtime that owns values stored here.
+    public init(invalidationSink: (any RenderInvalidationSink)? = nil) {
+        self.invalidationSink = invalidationSink
     }
 
     /// The number of stored state entries (for testing/debugging).
-    public var count: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return values.count
+    public var count: Int { values.count }
+
+    /// Structural identities currently owning stored values.
+    package var storedIdentities: Set<ViewIdentity> {
+        Set(values.keys.map(\.identity))
     }
 }
 
@@ -108,17 +101,25 @@ extension StateStorage {
     ///   - defaultValue: The initial value for newly created storage.
     /// - Returns: The persistent `Storage` object for this property.
     public func storage<Value>(for key: StateKey, default defaultValue: Value) -> StateBox<Value> {
-        lock.lock()
-        defer { lock.unlock() }
         if let existing = values[key] as? StateBox<Value> {
-            existing.identity = key.identity
-            existing.renderCache = renderCache
+            existing.bind(identity: key.identity, invalidationSink: invalidationSink)
             return existing
         }
-        let fresh = StateBox(defaultValue, renderCache: renderCache ?? .shared)
-        fresh.identity = key.identity
+        let fresh = StateBox(
+            defaultValue,
+            identity: key.identity,
+            invalidationSink: invalidationSink
+        )
         values[key] = fresh
         return fresh
+    }
+
+    /// Assigns the runtime that owns subsequently retrieved state boxes.
+    ///
+    /// TUIContext calls this while assembling injected services, before a
+    /// render pass can create state.
+    public func setInvalidationSink(_ invalidationSink: (any RenderInvalidationSink)?) {
+        self.invalidationSink = invalidationSink
     }
 
     /// Marks an identity as active during the current render pass.
@@ -128,9 +129,19 @@ extension StateStorage {
     ///
     /// - Parameter identity: The view identity to mark as active.
     public func markActive(_ identity: ViewIdentity) {
-        lock.lock()
         activeIdentities.insert(identity)
-        lock.unlock()
+    }
+
+    /// Keeps state records below a cached subtree active without traversing it.
+    package func markSubtreeActive(_ root: ViewIdentity) {
+        let storedIdentities = values.keys.lazy.map(\.identity)
+        let trackedIdentities = trackedValues.keys.lazy.map(\.identity)
+        activeIdentities.formUnion(storedIdentities.filter { identity in
+            identity == root || root.isAncestor(of: identity)
+        })
+        activeIdentities.formUnion(trackedIdentities.filter { identity in
+            identity == root || root.isAncestor(of: identity)
+        })
     }
 
     // MARK: - onChange Tracking
@@ -143,8 +154,6 @@ extension StateStorage {
     /// - Parameter identity: The view identity requesting an index.
     /// - Returns: The next available index (starting at 0).
     public func nextOnChangeIndex(for identity: ViewIdentity) -> Int {
-        lock.lock()
-        defer { lock.unlock() }
         let index = onChangeCounters[identity, default: 0]
         onChangeCounters[identity] = index + 1
         return index
@@ -155,9 +164,7 @@ extension StateStorage {
     /// - Parameter key: The state key (identity + property index).
     /// - Returns: The tracked value, or `nil` if no value was stored yet.
     public func trackedValue<V>(for key: StateKey) -> V? {
-        lock.lock()
-        defer { lock.unlock() }
-        return trackedValues[key] as? V
+        trackedValues[key] as? V
     }
 
     /// Stores a tracked value for change detection across render passes.
@@ -166,19 +173,15 @@ extension StateStorage {
     ///   - value: The value to store.
     ///   - key: The state key (identity + property index).
     public func setTrackedValue<V>(_ value: V, for key: StateKey) {
-        lock.lock()
         trackedValues[key] = value
-        lock.unlock()
     }
 
     // MARK: - Render Pass Lifecycle
 
     /// Begins a new render pass by clearing the active identity set.
     public func beginRenderPass() {
-        lock.lock()
         activeIdentities.removeAll(keepingCapacity: true)
         onChangeCounters.removeAll(keepingCapacity: true)
-        lock.unlock()
     }
 
     /// Ends a render pass by removing state for views no longer in the tree.
@@ -187,7 +190,6 @@ extension StateStorage {
     /// is removed. This prevents memory leaks from views that have been
     /// permanently removed (e.g., by navigation or conditional branches).
     public func endRenderPass() {
-        lock.lock()
         let staleKeys = values.keys.filter { !activeIdentities.contains($0.identity) }
         for key in staleKeys {
             values.removeValue(forKey: key)
@@ -196,17 +198,15 @@ extension StateStorage {
         for key in staleTrackedKeys {
             trackedValues.removeValue(forKey: key)
         }
-        lock.unlock()
     }
 
     /// Removes all state for descendants of the given identity.
     ///
-    /// Called by ``ConditionalView`` when switching branches to clean up
+    /// Called by `_ConditionalContent` when switching branches to clean up
     /// state from the now-inactive branch.
     ///
     /// - Parameter ancestor: The branch identity whose descendants should be removed.
     public func invalidateDescendants(of ancestor: ViewIdentity) {
-        lock.lock()
         let staleKeys = values.keys.filter { ancestor.isAncestor(of: $0.identity) }
         for key in staleKeys {
             values.removeValue(forKey: key)
@@ -215,17 +215,14 @@ extension StateStorage {
         for key in staleTrackedKeys {
             trackedValues.removeValue(forKey: key)
         }
-        lock.unlock()
     }
 
     /// Removes all stored state. Used during app cleanup.
     public func reset() {
-        lock.lock()
         values.removeAll()
         trackedValues.removeAll()
         onChangeCounters.removeAll()
         activeIdentities.removeAll()
-        lock.unlock()
     }
 }
 
@@ -237,66 +234,57 @@ extension StateStorage {
 /// It is a reference type so that mutations are visible across all copies
 /// of the `@State` struct (which uses `nonmutating set`).
 ///
-/// On value change, signals a re-render through `AppState.shared`.
+/// On value change, signals a re-render through its owning runtime.
 /// Cache invalidation is identity-aware: only the affected subtree is
 /// cleared instead of the entire cache.
 public final class StateBox<Value>: @unchecked Sendable {
-    /// Lock protecting the stored value and owner identity.
-    private let lock = NSLock()
-
-    /// Render cache to invalidate when this state changes.
-    weak var renderCache: RenderCache?
-
     /// The identity of the view that owns this state property.
     ///
     /// Set during hydration from ``StateStorage``. Used for targeted
     /// cache invalidation via ``RenderCache/clearAffected(by:)``.
-    private var storedIdentity: ViewIdentity?
+    private var identity: ViewIdentity?
 
-    var identity: ViewIdentity? {
-        get {
-            lock.lock()
-            defer { lock.unlock() }
-            return storedIdentity
-        }
-        set {
-            lock.lock()
-            storedIdentity = newValue
-            lock.unlock()
-        }
-    }
-
-    /// Backing value storage protected by ``lock``.
-    private var storedValue: Value
+    /// Runtime receiving invalidations when the value changes.
+    private var invalidationSink: (any RenderInvalidationSink)?
 
     /// The current value.
     public var value: Value {
-        get {
-            lock.lock()
-            defer { lock.unlock() }
-            return storedValue
-        }
-        set {
-            lock.lock()
-            storedValue = newValue
-            let identity = storedIdentity
-            let cache = renderCache ?? RenderCache.shared
-            lock.unlock()
-
+        didSet {
+            guard let invalidationSink else { return }
             if let identity {
-                cache.clearAffected(by: identity)
+                invalidationSink.invalidate(.subtree(identity))
             } else {
-                cache.clearAll()
+                invalidationSink.invalidate(.all)
             }
-            AppState.shared.setNeedsRender()
         }
     }
 
     /// Creates a state box with an initial value.
     ///
-    /// - Parameter value: The initial value.
-    public init(_ value: Value, renderCache: RenderCache = .shared) {
-        self.storedValue = value
-        self.renderCache = renderCache
+    /// - Parameters:
+    ///   - value: The initial value.
+    ///   - identity: The identity owning this value, if known.
+    ///   - invalidationSink: Runtime receiving invalidations.
+    public init(
+        _ value: Value,
+        identity: ViewIdentity? = nil,
+        invalidationSink: (any RenderInvalidationSink)? = nil
+    ) {
+        self.value = value
+        self.identity = identity
+        self.invalidationSink = invalidationSink
+    }
+}
+
+// MARK: - Internal API
+
+extension StateBox {
+    /// Associates this box with the runtime and identity owning it.
+    func bind(
+        identity: ViewIdentity,
+        invalidationSink: (any RenderInvalidationSink)?
+    ) {
+        self.identity = identity
+        self.invalidationSink = invalidationSink
     }
 }

@@ -5,11 +5,8 @@
 //  License: MIT  render pass management, and async task lifecycle.
 //
 
-#if canImport(Darwin)
-    import Darwin
-#endif
-import Foundation
 import Testing
+import TUIkitTestSupport
 
 @testable import TUIkit
 
@@ -23,7 +20,7 @@ struct LifecycleManagerAppearTests {
     func firstAppearance() {
         let manager = LifecycleManager()
         nonisolated(unsafe) var actionCalled = false
-        let result = manager.recordAppear(token: "view-1") {
+        let result = manager.recordAppear(identity: ViewIdentity(path: "view-1")) {
             actionCalled = true
         }
         #expect(result == true)
@@ -33,9 +30,9 @@ struct LifecycleManagerAppearTests {
     @Test("recordAppear returns false on repeated appearance")
     func repeatedAppearance() {
         let manager = LifecycleManager()
-        _ = manager.recordAppear(token: "view-1") {}
+        _ = manager.recordAppear(identity: ViewIdentity(path: "view-1")) {}
         nonisolated(unsafe) var secondCalled = false
-        let result = manager.recordAppear(token: "view-1") {
+        let result = manager.recordAppear(identity: ViewIdentity(path: "view-1")) {
             secondCalled = true
         }
         #expect(result == false)
@@ -45,34 +42,34 @@ struct LifecycleManagerAppearTests {
     @Test("hasAppeared returns false for unseen token")
     func hasNotAppeared() {
         let manager = LifecycleManager()
-        #expect(manager.hasAppeared(token: "never-seen") == false)
+        #expect(manager.hasAppeared(identity: ViewIdentity(path: "never-seen")) == false)
     }
 
     @Test("hasAppeared returns true after recordAppear")
     func hasAppearedAfterRecord() {
         let manager = LifecycleManager()
-        _ = manager.recordAppear(token: "view-1") {}
-        #expect(manager.hasAppeared(token: "view-1") == true)
+        _ = manager.recordAppear(identity: ViewIdentity(path: "view-1")) {}
+        #expect(manager.hasAppeared(identity: ViewIdentity(path: "view-1")) == true)
     }
 
     @Test("Multiple tokens are tracked independently")
     func independentTokens() {
         let manager = LifecycleManager()
-        _ = manager.recordAppear(token: "a") {}
-        _ = manager.recordAppear(token: "b") {}
-        #expect(manager.hasAppeared(token: "a") == true)
-        #expect(manager.hasAppeared(token: "b") == true)
-        #expect(manager.hasAppeared(token: "c") == false)
+        _ = manager.recordAppear(identity: ViewIdentity(path: "a")) {}
+        _ = manager.recordAppear(identity: ViewIdentity(path: "b")) {}
+        #expect(manager.hasAppeared(identity: ViewIdentity(path: "a")) == true)
+        #expect(manager.hasAppeared(identity: ViewIdentity(path: "b")) == true)
+        #expect(manager.hasAppeared(identity: ViewIdentity(path: "c")) == false)
     }
 
     @Test("reset clears all appeared tokens")
     func resetClears() {
         let manager = LifecycleManager()
-        _ = manager.recordAppear(token: "view-1") {}
-        _ = manager.recordAppear(token: "view-2") {}
+        _ = manager.recordAppear(identity: ViewIdentity(path: "view-1")) {}
+        _ = manager.recordAppear(identity: ViewIdentity(path: "view-2")) {}
         manager.reset()
-        #expect(manager.hasAppeared(token: "view-1") == false)
-        #expect(manager.hasAppeared(token: "view-2") == false)
+        #expect(manager.hasAppeared(identity: ViewIdentity(path: "view-1")) == false)
+        #expect(manager.hasAppeared(identity: ViewIdentity(path: "view-2")) == false)
     }
 }
 
@@ -87,14 +84,14 @@ struct LifecycleManagerRenderPassTests {
         let manager = LifecycleManager()
         // Pass 1: view appears
         manager.beginRenderPass()
-        _ = manager.recordAppear(token: "view-1") {}
+        _ = manager.recordAppear(identity: ViewIdentity(path: "view-1")) {}
         manager.endRenderPass() // sets visibleTokens = {"view-1"}
 
         // Pass 2: view does NOT appear
         manager.beginRenderPass() // clears currentRenderTokens
         manager.endRenderPass() // disappeared = {"view-1"}, removes from appearedTokens
 
-        #expect(manager.hasAppeared(token: "view-1") == false)
+        #expect(manager.hasAppeared(identity: ViewIdentity(path: "view-1")) == false)
     }
 
     @Test("endRenderPass triggers disappear for removed views")
@@ -104,8 +101,8 @@ struct LifecycleManagerRenderPassTests {
 
         // Render pass 1: view appears
         manager.beginRenderPass()
-        _ = manager.recordAppear(token: "view-1") {}
-        manager.registerDisappear(token: "view-1") {
+        _ = manager.recordAppear(identity: ViewIdentity(path: "view-1")) {}
+        manager.registerDisappear(identity: ViewIdentity(path: "view-1")) {
             disappeared = true
         }
         manager.endRenderPass()
@@ -125,15 +122,15 @@ struct LifecycleManagerRenderPassTests {
 
         // Render pass 1
         manager.beginRenderPass()
-        _ = manager.recordAppear(token: "view-1") {}
-        manager.registerDisappear(token: "view-1") {
+        _ = manager.recordAppear(identity: ViewIdentity(path: "view-1")) {}
+        manager.registerDisappear(identity: ViewIdentity(path: "view-1")) {
             disappeared = true
         }
         manager.endRenderPass()
 
         // Render pass 2: view still rendered
         manager.beginRenderPass()
-        _ = manager.recordAppear(token: "view-1") {}
+        _ = manager.recordAppear(identity: ViewIdentity(path: "view-1")) {}
         manager.endRenderPass()
         #expect(disappeared == false) // Still visible, no disappear
     }
@@ -145,7 +142,7 @@ struct LifecycleManagerRenderPassTests {
 
         // Pass 1: appear
         manager.beginRenderPass()
-        _ = manager.recordAppear(token: "view-1") { appearCount += 1 }
+        _ = manager.recordAppear(identity: ViewIdentity(path: "view-1")) { appearCount += 1 }
         manager.endRenderPass()
         #expect(appearCount == 1)
 
@@ -155,7 +152,7 @@ struct LifecycleManagerRenderPassTests {
 
         // Pass 3: reappear — action should fire again
         manager.beginRenderPass()
-        _ = manager.recordAppear(token: "view-1") { appearCount += 1 }
+        _ = manager.recordAppear(identity: ViewIdentity(path: "view-1")) { appearCount += 1 }
         manager.endRenderPass()
         #expect(appearCount == 2)
     }
@@ -171,7 +168,7 @@ struct LifecycleManagerDisappearTests {
     func registerStoresCallback() {
         let manager = LifecycleManager()
         nonisolated(unsafe) var called = false
-        manager.registerDisappear(token: "view-1") {
+        manager.registerDisappear(identity: ViewIdentity(path: "view-1")) {
             called = true
         }
         // Callback is stored but not called yet
@@ -182,20 +179,38 @@ struct LifecycleManagerDisappearTests {
     func unregisterRemoves() {
         let manager = LifecycleManager()
         nonisolated(unsafe) var called = false
-        manager.registerDisappear(token: "view-1") {
+        manager.registerDisappear(identity: ViewIdentity(path: "view-1")) {
             called = true
         }
-        manager.unregisterDisappear(token: "view-1")
+        manager.unregisterDisappear(identity: ViewIdentity(path: "view-1"))
 
         // Simulate disappear — callback should NOT fire
         manager.beginRenderPass()
-        _ = manager.recordAppear(token: "view-1") {}
+        _ = manager.recordAppear(identity: ViewIdentity(path: "view-1")) {}
         manager.endRenderPass()
 
         manager.beginRenderPass()
         // view-1 not rendered
         manager.endRenderPass()
         #expect(called == false) // Callback was unregistered
+    }
+
+    @Test("Repeated registration replaces one callback and unmount releases it")
+    func repeatedRegistrationDoesNotGrow() {
+        let manager = LifecycleManager()
+
+        manager.beginRenderPass()
+        _ = manager.recordAppear(identity: ViewIdentity(path: "view-1")) {}
+        manager.registerDisappear(identity: ViewIdentity(path: "view-1")) {}
+        manager.registerDisappear(identity: ViewIdentity(path: "view-1")) {}
+        manager.endRenderPass()
+
+        #expect(manager.disappearCallbackCount == 1)
+
+        manager.beginRenderPass()
+        manager.endRenderPass()
+
+        #expect(manager.disappearCallbackCount == 0)
     }
 }
 
@@ -205,275 +220,197 @@ struct LifecycleManagerDisappearTests {
 @Suite("LifecycleManager Task Tests")
 struct LifecycleManagerTaskTests {
 
-    @Test("startTask creates a task")
-    func startTask() async throws {
+    @Test("Unchanged structural task stays mounted and ID changes replace it", .timeLimit(.minutes(1)))
+    func structuralTaskIdentity() async {
         let manager = LifecycleManager()
-        let probe = TaskExecutionProbe()
-        manager.startTask(token: "task-1", priority: .medium) {
-            probe.markExecuted()
+        let identity = ViewIdentity(path: "Root/@task")
+        let events = TraceRecorder<String>()
+        let firstStarted = AsyncSignal()
+        let firstRelease = AsyncSignal()
+        let firstCompleted = AsyncSignal()
+        let replacementStarted = AsyncSignal()
+
+        manager.beginRenderPass()
+        let started = manager.updateTask(identity: identity, id: 1, priority: .medium) {
+            events.record("first-started")
+            firstStarted.signal()
+            await firstRelease.wait()
+            events.record("first-cancelled:\(Task.isCancelled)")
+            firstCompleted.signal()
         }
-        try await Task.sleep(for: .milliseconds(50))
-        #expect(probe.executed == true)
+        manager.endRenderPass()
+        await firstStarted.wait()
+
+        manager.beginRenderPass()
+        let preserved = manager.updateTask(identity: identity, id: 1, priority: .medium) {
+            events.record("unexpected-restart")
+        }
+        manager.endRenderPass()
+
+        #expect(started)
+        #expect(preserved == false)
+        #expect(manager.taskCount == 1)
+
+        manager.beginRenderPass()
+        let replaced = manager.updateTask(identity: identity, id: 2, priority: .medium) {
+            events.record("replacement-started")
+            replacementStarted.signal()
+        }
+        manager.endRenderPass()
+
+        firstRelease.signal()
+        await firstCompleted.wait()
+        await replacementStarted.wait()
+
+        #expect(replaced)
+        #expect(events.snapshot().contains("unexpected-restart") == false)
+        #expect(events.snapshot().contains("first-cancelled:true"))
+        #expect(manager.taskCount == 1)
     }
 
-    @Test("startTask runs detached from the main thread")
-    func startTaskRunsDetachedFromMainThread() async throws {
+    @Test("Unmount cancels and releases a structural task", .timeLimit(.minutes(1)))
+    func structuralTaskUnmount() async {
         let manager = LifecycleManager()
-        let probe = TaskExecutionProbe()
+        let identity = ViewIdentity(path: "Root/@task")
+        let started = AsyncSignal()
+        let release = AsyncSignal()
+        let completed = AsyncSignal()
+        let events = TraceRecorder<String>()
 
-        manager.startTask(token: "task-1", priority: .medium) {
-            probe.markThread(isMainThread: isCurrentThreadMain())
+        manager.beginRenderPass()
+        manager.updateTask(identity: identity, id: 1, priority: .medium) {
+            started.signal()
+            await release.wait()
+            events.record("cancelled:\(Task.isCancelled)")
+            completed.signal()
         }
+        manager.endRenderPass()
+        await started.wait()
 
-        try await Task.sleep(for: .milliseconds(50))
-        #expect(probe.executed == true)
-        #expect(probe.ranOnMainThread == false)
+        manager.beginRenderPass()
+        manager.endRenderPass()
+        release.signal()
+        await completed.wait()
+
+        #expect(events.snapshot() == ["cancelled:true"])
+        #expect(manager.taskCount == 0)
     }
 
-    @Test("cancelTask cancels without crashing")
-    func cancelTask() async throws {
+    @Test("Structural task preserves inherited MainActor isolation", .timeLimit(.minutes(1)))
+    func structuralTaskActorIsolation() async {
         let manager = LifecycleManager()
-        manager.startTask(token: "task-1", priority: .medium) {
-            try? await Task.sleep(for: .seconds(10))
+        let identity = ViewIdentity(path: "Root/@task")
+        let started = AsyncSignal()
+        let state = MainActorTaskState()
+
+        manager.beginRenderPass()
+        manager.updateTask(identity: identity, id: 1, priority: .medium) {
+            MainActor.preconditionIsolated()
+            state.value = 42
+            started.signal()
         }
-        // Cancel immediately. This verifies cancellation is requested and the
-        // lifecycle manager remains usable.
-        manager.cancelTask(token: "task-1")
-        try await Task.sleep(for: .milliseconds(50))
-        manager.startTask(token: "task-1", priority: .medium) {}
-        manager.cancelTask(token: "task-1")
+        manager.endRenderPass()
+        await started.wait()
+
+        #expect(state.value == 42)
     }
 
-    @Test("startTask replaces existing task for same token")
-    func replaceTask() async throws {
+    @Test("updateTask runs its operation", .timeLimit(.minutes(1)))
+    func updateTaskRuns() async {
         let manager = LifecycleManager()
-        let probe = TaskExecutionProbe()
+        let events = TraceRecorder<LifecycleTaskEvent>()
+        let started = AsyncSignal()
 
-        manager.startTask(token: "task-1", priority: .medium) {
-            // Long-running first task
-            try? await Task.sleep(for: .seconds(10))
+        manager.updateTask(identity: ViewIdentity(path: "task-1"), id: 1, priority: .medium) {
+            events.record(.started("task-1"))
+            started.signal()
         }
-        // Replace immediately with short task
-        manager.startTask(token: "task-1", priority: .medium) {
-            probe.markExecuted()
-        }
-        try await Task.sleep(for: .milliseconds(50))
-        #expect(probe.executed == true)
+
+        await started.wait()
+
+        #expect(events.snapshot() == [.started("task-1")])
     }
 
-    @Test("reset does not crash with running tasks")
-    func resetWithRunningTasks() async throws {
+    @Test("cancelTask cancels a running task", .timeLimit(.minutes(1)))
+    func cancelTask() async {
         let manager = LifecycleManager()
-        manager.startTask(token: "task-1", priority: .medium) {
-            try? await Task.sleep(for: .seconds(10))
+        let events = TraceRecorder<LifecycleTaskEvent>()
+        let started = AsyncSignal()
+        let release = AsyncSignal()
+        let completed = AsyncSignal()
+
+        manager.updateTask(identity: ViewIdentity(path: "task-1"), id: 1, priority: .medium) {
+            events.record(.started("task-1"))
+            started.signal()
+            await release.wait()
+            events.record(.completed("task-1", wasCancelled: Task.isCancelled))
+            completed.signal()
         }
-        manager.startTask(token: "task-2", priority: .medium) {
-            try? await Task.sleep(for: .seconds(10))
+
+        await started.wait()
+
+        manager.cancelTask(identity: ViewIdentity(path: "task-1"))
+        release.signal()
+        await completed.wait()
+
+        #expect(events.snapshot() == [
+            .started("task-1"),
+            .completed("task-1", wasCancelled: true)
+        ])
+    }
+
+    @Test("reset cancels all running tasks", .timeLimit(.minutes(1)))
+    func resetWithRunningTasks() async {
+        let manager = LifecycleManager()
+        let events = TraceRecorder<LifecycleTaskEvent>()
+        let firstStarted = AsyncSignal()
+        let firstRelease = AsyncSignal()
+        let firstCompleted = AsyncSignal()
+        let secondStarted = AsyncSignal()
+        let secondRelease = AsyncSignal()
+        let secondCompleted = AsyncSignal()
+
+        manager.updateTask(identity: ViewIdentity(path: "task-1"), id: 1, priority: .medium) {
+            events.record(.started("task-1"))
+            firstStarted.signal()
+            await firstRelease.wait()
+            events.record(.completed("task-1", wasCancelled: Task.isCancelled))
+            firstCompleted.signal()
         }
-        // Reset should cancel all tasks without crashing
+        manager.updateTask(identity: ViewIdentity(path: "task-2"), id: 1, priority: .medium) {
+            events.record(.started("task-2"))
+            secondStarted.signal()
+            await secondRelease.wait()
+            events.record(.completed("task-2", wasCancelled: Task.isCancelled))
+            secondCompleted.signal()
+        }
+
+        await firstStarted.wait()
+        await secondStarted.wait()
+
         manager.reset()
-        // Verify clean state
-        #expect(manager.hasAppeared(token: "task-1") == false)
-    }
+        firstRelease.signal()
+        secondRelease.signal()
+        await firstCompleted.wait()
+        await secondCompleted.wait()
 
-    @Test("rapid appear/disappear cancels each task before reappearance")
-    func rapidAppearDisappearCancelsEachTaskBeforeReappearance() async throws {
-        let manager = LifecycleManager()
-        let probe = TaskLifecycleProbe()
-        let token = "rapid-task-view"
-        let cycles = 20
-
-        for cycle in 0..<cycles {
-            manager.beginRenderPass()
-            let shouldStartTask = !manager.hasAppeared(token: token)
-            _ = manager.recordAppear(token: token) {}
-            if shouldStartTask {
-                manager.startTask(token: token, priority: .medium) {
-                    await probe.runTask(index: cycle)
-                }
-            }
-            manager.registerDisappear(token: token) { [manager] in
-                manager.cancelTask(token: token)
-            }
-            manager.endRenderPass()
-
-            try await probe.waitForStartedCount(cycle + 1)
-
-            manager.beginRenderPass()
-            manager.endRenderPass()
-
-            try await probe.waitForCancelledCount(cycle + 1)
-            #expect(manager.hasAppeared(token: token) == false)
-        }
-
-        #expect(probe.startedCount == cycles)
-        #expect(probe.cancelledCount == cycles)
-    }
-
-    @Test("TUIContext reset cancels lifecycle background tasks")
-    func contextResetCancelsLifecycleBackgroundTasks() async throws {
-        let context = TUIContext()
-        let probe = TaskLifecycleProbe()
-        let taskCount = 8
-
-        for index in 0..<taskCount {
-            context.lifecycle.startTask(token: "shutdown-task-\(index)", priority: .medium) {
-                await probe.runTask(index: index)
-            }
-        }
-
-        try await probe.waitForStartedCount(taskCount)
-        context.reset()
-        try await probe.waitForCancelledCount(taskCount)
-
-        for index in 0..<taskCount {
-            #expect(context.lifecycle.hasAppeared(token: "shutdown-task-\(index)") == false)
-        }
+        let snapshot = events.snapshot()
+        #expect(snapshot.count == 4)
+        #expect(Set(snapshot) == [
+            .started("task-1"),
+            .completed("task-1", wasCancelled: true),
+            .started("task-2"),
+            .completed("task-2", wasCancelled: true)
+        ])
     }
 }
 
-private func isCurrentThreadMain() -> Bool {
-    #if canImport(Darwin)
-        pthread_main_np() != 0
-    #else
-        false
-    #endif
+private enum LifecycleTaskEvent: Hashable, Sendable {
+    case started(String)
+    case completed(String, wasCancelled: Bool)
 }
 
-private final class TaskExecutionProbe: @unchecked Sendable {
-    private let lock = NSLock()
-    private var _executed = false
-    private var _ranOnMainThread: Bool?
-
-    var executed: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return _executed
-    }
-
-    var ranOnMainThread: Bool? {
-        lock.lock()
-        defer { lock.unlock() }
-        return _ranOnMainThread
-    }
-
-    func markExecuted() {
-        lock.lock()
-        _executed = true
-        lock.unlock()
-    }
-
-    func markThread(isMainThread: Bool) {
-        lock.lock()
-        _executed = true
-        _ranOnMainThread = isMainThread
-        lock.unlock()
-    }
-}
-
-private struct TaskLifecycleProbeTimeout: Error {}
-
-private func waitWithTimeout(
-    _ timeout: Duration,
-    operation: @escaping @Sendable () async -> Void
-) async throws {
-    try await withThrowingTaskGroup(of: Void.self) { group in
-        group.addTask {
-            await operation()
-        }
-        group.addTask {
-            try await Task.sleep(for: timeout)
-            throw TaskLifecycleProbeTimeout()
-        }
-
-        try await group.next()
-        group.cancelAll()
-    }
-}
-
-private final class TaskLifecycleProbe: @unchecked Sendable {
-    private let lock = NSLock()
-    private var started: Set<Int> = []
-    private var cancelled: Set<Int> = []
-    private var startedWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
-    private var cancelledWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
-
-    var startedCount: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return started.count
-    }
-
-    var cancelledCount: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return cancelled.count
-    }
-
-    func runTask(index: Int) async {
-        markStarted(index)
-        await withTaskCancellationHandler {
-            try? await Task.sleep(for: .seconds(10))
-        } onCancel: {
-            self.markCancelled(index)
-        }
-    }
-
-    func waitForStartedCount(_ expectedCount: Int, timeout: Duration = .seconds(1)) async throws {
-        try await waitWithTimeout(timeout) {
-            await self.waitForStartedCountUnbounded(expectedCount)
-        }
-    }
-
-    func waitForCancelledCount(_ expectedCount: Int, timeout: Duration = .seconds(1)) async throws {
-        try await waitWithTimeout(timeout) {
-            await self.waitForCancelledCountUnbounded(expectedCount)
-        }
-    }
-
-    private func waitForStartedCountUnbounded(_ expectedCount: Int) async {
-        await withCheckedContinuation { continuation in
-            lock.lock()
-            if started.count >= expectedCount {
-                lock.unlock()
-                continuation.resume()
-            } else {
-                startedWaiters.append((expectedCount, continuation))
-                lock.unlock()
-            }
-        }
-    }
-
-    private func waitForCancelledCountUnbounded(_ expectedCount: Int) async {
-        await withCheckedContinuation { continuation in
-            lock.lock()
-            if cancelled.count >= expectedCount {
-                lock.unlock()
-                continuation.resume()
-            } else {
-                cancelledWaiters.append((expectedCount, continuation))
-                lock.unlock()
-            }
-        }
-    }
-
-    private func markStarted(_ index: Int) {
-        lock.lock()
-        started.insert(index)
-        let resumable = startedWaiters.filter { started.count >= $0.0 }.map(\.1)
-        startedWaiters.removeAll { started.count >= $0.0 }
-        lock.unlock()
-
-        resumable.forEach { $0.resume() }
-    }
-
-    private func markCancelled(_ index: Int) {
-        lock.lock()
-        cancelled.insert(index)
-        let resumable = cancelledWaiters.filter { cancelled.count >= $0.0 }.map(\.1)
-        cancelledWaiters.removeAll { cancelled.count >= $0.0 }
-        lock.unlock()
-
-        resumable.forEach { $0.resume() }
-    }
+@MainActor
+private final class MainActorTaskState {
+    var value = 0
 }

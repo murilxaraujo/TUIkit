@@ -10,12 +10,8 @@
 /// element. The collection elements must be `Identifiable` or an
 /// explicit ID key path must be provided.
 ///
-/// ## Rendering
-///
-/// `ForEach` renders each generated child in collection order. This preserves
-/// SwiftUI-style usage in stacks, panels, custom containers, and other
-/// `@ViewBuilder` contexts without requiring callers to replace `ForEach` with
-/// a `for` loop.
+/// Each generated child is associated with the element's explicit ID. The
+/// identity remains stable when elements are inserted, removed, or reordered.
 ///
 /// # Example with Identifiable
 ///
@@ -71,27 +67,28 @@ public struct ForEach<Data: RandomAccessCollection, ID: Hashable, Content: View>
         self.content = content
     }
 
-    /// Never called — `ForEach` renders directly via ``Renderable``.
-    public var body: Never {
-        fatalError("ForEach renders via Renderable")
+    public var body: some View {
+        core
     }
 }
 
-// MARK: - Rendering
+// MARK: - Dynamic Children
 
-extension ForEach: Renderable, ChildInfoProvider {
-    public func renderToBuffer(context: RenderContext) -> FrameBuffer {
-        FrameBuffer(verticallyStacking: childInfos(context: context).compactMap(\.buffer))
+extension ForEach: ChildInfoProvider, ChildViewProvider {
+    public func childInfos(context: RenderContext) -> [ChildInfo] {
+        core.childInfos(context: context)
     }
 
-    public func childInfos(context: RenderContext) -> [ChildInfo] {
-        data.enumerated().map { index, element in
-            let view = content(element)
-            return makeChildInfo(
-                for: view,
-                context: context.withChildIdentity(type: type(of: view), index: index)
-            )
-        }
+    public func childViews(context: RenderContext) -> [ChildView] {
+        core.childViews(context: context)
+    }
+}
+
+extension ForEach {
+    func keyedSnapshot(context: RenderContext) -> KeyedCollectionSnapshot<Data.Element, ID> {
+        let snapshot = KeyedCollectionSnapshot(data, id: idKeyPath)
+        snapshot.reportDuplicates(container: "ForEach", context: context)
+        return snapshot
     }
 }
 
@@ -128,5 +125,53 @@ extension ForEach where Data == Range<Int>, ID == Int {
         self.data = data
         self.idKeyPath = \.self
         self.content = content
+    }
+}
+
+// MARK: - Private Core
+
+private extension ForEach {
+    var core: _ForEachCore<Data, ID, Content> {
+        _ForEachCore(data: data, idKeyPath: idKeyPath, content: content)
+    }
+}
+
+private struct _ForEachCore<Data: RandomAccessCollection, ID: Hashable, Content: View>: View, Renderable,
+    ChildInfoProvider, ChildViewProvider {
+    let data: Data
+    let idKeyPath: KeyPath<Data.Element, ID>
+    let content: (Data.Element) -> Content
+
+    var body: Never {
+        fatalError("_ForEachCore renders its dynamic children directly")
+    }
+
+    func renderToBuffer(context: RenderContext) -> FrameBuffer {
+        FrameBuffer(verticallyStacking: childInfos(context: context).compactMap(\.buffer))
+    }
+
+    func childInfos(context: RenderContext) -> [ChildInfo] {
+        let snapshot = KeyedCollectionSnapshot(data, id: idKeyPath)
+        snapshot.reportDuplicates(container: "ForEach", context: context)
+
+        return snapshot.entries.map { entry in
+            let view = content(entry.element)
+            return makeChildInfo(
+                for: view,
+                context: context.withKeyedChildIdentity(
+                    type: Content.self,
+                    key: entry.identityKey
+                )
+            )
+        }
+    }
+
+    func childViews(context: RenderContext) -> [ChildView] {
+        let snapshot = KeyedCollectionSnapshot(data, id: idKeyPath)
+        snapshot.reportDuplicates(container: "ForEach", context: context)
+
+        return snapshot.entries.map { entry in
+            ChildView(content(entry.element), key: entry.identityKey)
+        }
     }
 }

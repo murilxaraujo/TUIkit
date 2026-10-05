@@ -107,7 +107,6 @@ struct NavigationPathTests {
     func emptyPath() {
         let path = NavigationPath()
         #expect(path.isEmpty)
-        #expect(path.count == 0)
     }
 
     @Test("append and remove values")

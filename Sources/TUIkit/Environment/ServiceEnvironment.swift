@@ -8,7 +8,21 @@
 
 /// EnvironmentKey for the localization service.
 private struct LocalizationServiceKey: EnvironmentKey {
-    static let defaultValue = LocalizationService.shared
+    static var defaultValue: LocalizationService { LocalizationService.transient() }
+}
+
+// MARK: - Runtime Clock
+
+/// EnvironmentKey for time-based runtime services.
+private struct RuntimeClockKey: EnvironmentKey {
+    static let defaultValue = RuntimeClock.system
+}
+
+// MARK: - Application Storage
+
+/// EnvironmentKey for the runtime-owned AppStorage backend.
+private struct StorageBackendKey: EnvironmentKey {
+    static var defaultValue: any StorageBackend { VolatileStorageBackend() }
 }
 
 // MARK: - Lifecycle Manager
@@ -32,6 +46,13 @@ private struct PreferenceStorageKey: EnvironmentKey {
     static let defaultValue: PreferenceStorage? = nil
 }
 
+// MARK: - Runtime Diagnostics
+
+/// EnvironmentKey for diagnostics emitted during view traversal.
+private struct RuntimeDiagnosticsKey: EnvironmentKey {
+    static let defaultValue: RuntimeDiagnostics? = nil
+}
+
 // MARK: - Pulse Phase
 
 /// EnvironmentKey for the focus indicator breathing animation phase.
@@ -48,7 +69,6 @@ private struct CursorTimerKey: EnvironmentKey {
 
 // MARK: - Render Performance
 
-/// EnvironmentKey for recent render-loop performance diagnostics.
 private struct RenderPerformanceKey: EnvironmentKey {
     static let defaultValue = TUIRenderPerformance()
 }
@@ -72,14 +92,26 @@ private struct ActiveFocusSectionKey: EnvironmentKey {
 extension EnvironmentValues {
 
     /// The localization service for retrieving translated strings.
-    var localizationService: LocalizationService {
+    public var localizationService: LocalizationService {
         get { self[LocalizationServiceKey.self] }
         set { self[LocalizationServiceKey.self] = newValue }
     }
 
     /// The currently active language.
-    var currentLanguage: LocalizationService.Language {
+    public var currentLanguage: LocalizationService.Language {
         localizationService.currentLanguage
+    }
+
+    /// Clock used by time-based views and services in this runtime.
+    var runtimeClock: RuntimeClock {
+        get { self[RuntimeClockKey.self] }
+        set { self[RuntimeClockKey.self] = newValue }
+    }
+
+    /// Persistent storage backend owned by this runtime.
+    var storageBackend: any StorageBackend {
+        get { self[StorageBackendKey.self] }
+        set { self[StorageBackendKey.self] = newValue }
     }
 
     /// View lifecycle tracking (appear, disappear, task management).
@@ -100,6 +132,12 @@ extension EnvironmentValues {
         set { self[PreferenceStorageKey.self] = newValue }
     }
 
+    /// Diagnostics emitted by the runtime that owns this render tree.
+    var runtimeDiagnostics: RuntimeDiagnostics? {
+        get { self[RuntimeDiagnosticsKey.self] }
+        set { self[RuntimeDiagnosticsKey.self] = newValue }
+    }
+
     /// The current breathing animation phase (0-1) for the focus indicator.
     var pulsePhase: Double {
         get { self[PulsePhaseKey.self] }
@@ -112,7 +150,7 @@ extension EnvironmentValues {
         set { self[CursorTimerKey.self] = newValue }
     }
 
-    /// Recent render-loop performance diagnostics for this runtime context.
+    /// Recent render-loop performance for the owning runtime.
     public var renderPerformance: TUIRenderPerformance {
         get { self[RenderPerformanceKey.self] }
         set { self[RenderPerformanceKey.self] = newValue }

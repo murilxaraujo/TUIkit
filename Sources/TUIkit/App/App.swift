@@ -12,7 +12,7 @@
     import Darwin
 #endif
 
-import Foundation
+import Dispatch
 
 // MARK: - App Protocol
 
@@ -52,14 +52,43 @@ extension App {
     /// This method is called by the `@main` attribute and starts
     /// the main run loop of the application.
     ///
-    /// Since TUIKit runs on the main thread and `@main` entry points
-    /// execute on the main thread, we use `MainActor.assumeIsolated`
-    /// to access MainActor-isolated types synchronously.
     public static func main() {
-        MainActor.assumeIsolated {
-            let app = Self()
-            let runner = AppRunner<Self>(app: app)
-            runner.run()
+        _ = Task { @MainActor in
+            do {
+                let runner = AppRunner<Self>(app: Self())
+                try await runner.run()
+                exit(EXIT_SUCCESS)
+            } catch {
+                writeApplicationFailure(error)
+                exit(EXIT_FAILURE)
+            }
+        }
+        dispatchMain()
+    }
+}
+
+/// Writes a best-effort runtime failure diagnostic to standard error.
+private func writeApplicationFailure(_ error: any Error) {
+    let bytes = Array("TUIkit application failed: \(error)\n".utf8)
+    let systemCalls = TerminalSystemCalls.system
+
+    bytes.withUnsafeBufferPointer { buffer in
+        guard let baseAddress = buffer.baseAddress else { return }
+        var written = 0
+
+        while written < buffer.count {
+            let result = systemCalls.write(
+                STDERR_FILENO,
+                baseAddress + written,
+                buffer.count - written
+            )
+            if result > 0 {
+                written += result
+            } else if result < 0, systemCalls.errorCode() == EINTR {
+                continue
+            } else {
+                return
+            }
         }
     }
 }
@@ -71,7 +100,7 @@ extension App {
 /// `AppRunner` is the main coordinator that owns the run loop and
 /// delegates to specialized managers:
 /// - `SignalManager` - POSIX signal handling (SIGINT, SIGWINCH)
-/// - `InputHandler` - Key event dispatch (global Ctrl+C interrupt, status bar, views, defaults)
+/// - `InputHandler` - Key event dispatch (status bar, views, defaults)
 /// - `RenderLoop` — Rendering pipeline (scene + status bar)
 @MainActor
 internal final class AppRunner<A: App> {
@@ -82,41 +111,104 @@ internal final class AppRunner<A: App> {
     private let focusManager: FocusManager
     private let paletteManager: ThemeManager
     private let statusBar: StatusBarState
-    private let terminal: Terminal
+    private let terminal: any TerminalProtocol
     private let tuiContext: TUIContext
-    private var isRunning = false
-    private var signals = SignalManager()
+    private let eventChannel: RuntimeEventChannel
+    private let inputSource: TerminalInputSource?
+    private let signals: SignalManager?
 
-    init(app: A) {
+    init(
+        app: A,
+        terminal: (any TerminalProtocol)? = nil,
+        tuiContext: TUIContext? = nil,
+        eventChannel: RuntimeEventChannel = RuntimeEventChannel(),
+        inputSource: TerminalInputSource? = TerminalInputSource(),
+        signals: SignalManager? = SignalManager()
+    ) {
+        let tuiContext = tuiContext ?? TUIContext.production()
         self.app = app
-        self.appState = AppState.shared
-        self.appearanceManager = ThemeManager(items: AppearanceRegistry.all, renderTrigger: { [appState] in appState.setNeedsRender() })
-        self.appHeader = AppHeaderState()
-        self.focusManager = FocusManager()
-        self.paletteManager = ThemeManager(items: PaletteRegistry.all, renderTrigger: { [appState] in appState.setNeedsRender() })
-        self.statusBar = StatusBarState(appState: appState)
+        self.appState = tuiContext.appState
+        self.appearanceManager = tuiContext.appearanceManager
+        self.appHeader = tuiContext.appHeader
+        self.focusManager = tuiContext.focusManager
+        self.paletteManager = tuiContext.paletteManager
+        self.statusBar = tuiContext.statusBar
         self.statusBar.style = .bordered
-        self.terminal = Terminal()
-        self.tuiContext = TUIContext()
+        self.terminal = terminal ?? Terminal()
+        self.tuiContext = tuiContext
+        self.eventChannel = eventChannel
+        self.inputSource = inputSource
+        self.signals = signals
     }
 }
 
 // MARK: - Internal API
 
 extension AppRunner {
-    func run() {
-        // Create run-loop dependencies (previously IUOs, now local variables)
-        let inputHandler = InputHandler(
+    func run() async throws {
+        let inputHandler = makeInputHandler()
+        let renderer = makeRenderer()
+        let pulseTimer = PulseTimer(clock: tuiContext.clock)
+        let cursorTimer = CursorTimer(clock: tuiContext.clock)
+        let animationScheduler = RuntimeAnimationScheduler(
+            clock: tuiContext.clock,
+            eventChannel: eventChannel
+        )
+
+        await startRuntime(pulseTimer: pulseTimer, cursorTimer: cursorTimer)
+        do {
+            try throwPendingTerminalFailure()
+            try render(
+                using: renderer,
+                pulseTimer: pulseTimer,
+                cursorTimer: cursorTimer,
+                animationScheduler: animationScheduler
+            )
+            try await processEvents(
+                using: inputHandler,
+                renderer: renderer,
+                pulseTimer: pulseTimer,
+                cursorTimer: cursorTimer,
+                animationScheduler: animationScheduler
+            )
+        } catch {
+            stopRuntime(
+                pulseTimer: pulseTimer,
+                cursorTimer: cursorTimer,
+                animationScheduler: animationScheduler
+            )
+            throw error
+        }
+
+        stopRuntime(
+            pulseTimer: pulseTimer,
+            cursorTimer: cursorTimer,
+            animationScheduler: animationScheduler
+        )
+        try throwPendingTerminalFailure()
+    }
+}
+
+// MARK: - Private Helpers
+
+private extension AppRunner {
+    /// Creates the runtime's input dispatcher.
+    func makeInputHandler() -> InputHandler {
+        InputHandler(
             statusBar: statusBar,
             keyEventDispatcher: tuiContext.keyEventDispatcher,
             focusManager: focusManager,
             paletteManager: paletteManager,
             appearanceManager: appearanceManager,
-            onQuit: { [weak self] in
-                self?.isRunning = false
+            onQuit: { [eventChannel] in
+                eventChannel.send(.shutdownRequested)
             }
         )
-        let renderer = RenderLoop(
+    }
+
+    /// Creates the runtime's renderer.
+    func makeRenderer() -> RenderLoop<A> {
+        RenderLoop(
             app: app,
             terminal: terminal,
             statusBar: statusBar,
@@ -126,92 +218,138 @@ extension AppRunner {
             appearanceManager: appearanceManager,
             tuiContext: tuiContext
         )
-        let pulseTimer = PulseTimer(renderNotifier: appState)
-        let cursorTimer = CursorTimer(renderNotifier: appState)
+    }
 
-        // Setup
-        signals.install()
+    /// Installs event sources and prepares the terminal session.
+    func startRuntime(pulseTimer: PulseTimer, cursorTimer: CursorTimer) async {
+        if let signals {
+            await signals.install(sendingTo: eventChannel)
+        }
+        inputSource?.start(sendingTo: eventChannel)
         terminal.enterAlternateScreen()
         terminal.hideCursor()
         terminal.enableRawMode()
 
-        // Register for state changes
-        appState.observe { [signals] in
-            signals.requestRerender()
+        appState.observe { [eventChannel] in
+            eventChannel.send(.renderRequested)
         }
-
-        // Reset pulse animation and trigger re-render when focus changes
-        focusManager.onFocusChange = { [weak pulseTimer, weak appState] in
+        let runtimeFocusChangeHandler = focusManager.onFocusChange
+        focusManager.onFocusChange = { [weak pulseTimer] in
             pulseTimer?.reset()
-            appState?.setNeedsRender()
+            runtimeFocusChangeHandler?()
         }
-
-        isRunning = true
-
-        // Start animation timers
         pulseTimer.start()
         cursorTimer.start()
+    }
 
-        // Initial render
-        renderer.render(pulsePhase: pulseTimer.phase, cursorTimer: cursorTimer)
-
-        // Main loop
-        while isRunning {
-            // Check for graceful shutdown request (from SIGINT handler).
-            // Ctrl+C in raw mode is handled as a key event by InputHandler.
-            if signals.shouldShutdown {
-                isRunning = false
-                break
-            }
-
-            // Invalidate diff cache on terminal resize so every line
-            // is rewritten with the new dimensions.
-            if signals.consumeResizeFlag() {
-                renderer.invalidateDiffCache()
-            }
-
-            // Check if terminal was resized or state changed
-            if signals.consumeRerenderFlag() || appState.needsRender {
-                appState.didRender()
-                renderer.render(pulsePhase: pulseTimer.phase, cursorTimer: cursorTimer)
-            }
-
-            // Read key events (non-blocking with VTIME=0)
-            // Process all available events per frame. A high limit prevents
-            // input buffering lag during paste operations while still avoiding
-            // infinite loops if input arrives faster than we can process.
-            var eventsProcessed = 0
-            let maxEventsPerFrame = 128
-            while eventsProcessed < maxEventsPerFrame,
-                  let keyEvent = terminal.readKeyEvent() {
-                inputHandler.handle(keyEvent)
-                eventsProcessed += 1
-            }
-
-            // Give the main run loop a chance to execute enqueued MainActor
-            // continuations. TUIkit's run loop is synchronous; without this,
-            // Task { ... } created from key handlers can starve forever while
-            // the terminal loop keeps sleeping and polling input.
-            _ = RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.001))
-
-            // Sleep ~24ms to yield CPU.
-            // This sets the maximum frame rate to ~42 FPS.
-            //
-            usleep(22_800)
-        }
-
-        // Stop animation timers before cleanup.
+    /// Cancels runtime work and restores the terminal deterministically.
+    func stopRuntime(
+        pulseTimer: PulseTimer,
+        cursorTimer: CursorTimer,
+        animationScheduler: RuntimeAnimationScheduler
+    ) {
+        animationScheduler.stop()
         pulseTimer.stop()
         cursorTimer.stop()
-
-        // Cleanup
+        inputSource?.stop()
+        signals?.stop()
+        eventChannel.finish()
         cleanup()
     }
-}
 
-// MARK: - Private Helpers
+    /// Serially consumes state, input, signal, and animation events.
+    func processEvents(
+        using inputHandler: InputHandler,
+        renderer: RenderLoop<A>,
+        pulseTimer: PulseTimer,
+        cursorTimer: CursorTimer,
+        animationScheduler: RuntimeAnimationScheduler
+    ) async throws {
+        try await withTaskCancellationHandler {
+            var iterator = eventChannel.events.makeAsyncIterator()
+            while let event = await iterator.next() {
+                switch event {
+                case .renderRequested:
+                    guard appState.needsRender else { continue }
+                    try render(
+                        using: renderer,
+                        pulseTimer: pulseTimer,
+                        cursorTimer: cursorTimer,
+                        animationScheduler: animationScheduler
+                    )
+                case .inputAvailable:
+                    try processAvailableInput(using: inputHandler)
+                case .terminalResized:
+                    renderer.invalidateDiffCache()
+                    try render(
+                        using: renderer,
+                        pulseTimer: pulseTimer,
+                        cursorTimer: cursorTimer,
+                        animationScheduler: animationScheduler
+                    )
+                case .animationDeadline:
+                    try render(
+                        using: renderer,
+                        pulseTimer: pulseTimer,
+                        cursorTimer: cursorTimer,
+                        animationScheduler: animationScheduler
+                    )
+                case .shutdownRequested:
+                    return
+                }
+            }
+        } onCancel: { [eventChannel] in
+            eventChannel.send(.shutdownRequested)
+        }
+    }
 
-private extension AppRunner {
+    /// Renders one frame and schedules only the animation work it exposes.
+    func render(
+        using renderer: RenderLoop<A>,
+        pulseTimer: PulseTimer,
+        cursorTimer: CursorTimer,
+        animationScheduler: RuntimeAnimationScheduler
+    ) throws {
+        appState.didRender()
+        renderer.render(pulsePhase: pulseTimer.phase, cursorTimer: cursorTimer)
+        try throwPendingTerminalFailure()
+        animationScheduler.schedule(after: nextAnimationInterval)
+    }
+
+    /// Returns the cadence required by currently visible focus animations.
+    var nextAnimationInterval: Double? {
+        if focusManager.hasTextInputFocus {
+            return 0.05
+        }
+        if focusManager.currentFocused != nil || focusManager.activeSectionIdentifier != nil {
+            return 0.1
+        }
+        return nil
+    }
+
+    /// Drains a bounded batch after the input descriptor becomes readable.
+    func processAvailableInput(using inputHandler: InputHandler) throws {
+        var eventsProcessed = 0
+        let maxEventsPerBatch = 128
+
+        while eventsProcessed < maxEventsPerBatch {
+            let keyEvent = terminal.readKeyEvent()
+            try throwPendingTerminalFailure()
+            guard let keyEvent else { return }
+            inputHandler.handle(keyEvent)
+            eventsProcessed += 1
+        }
+    }
+
+    /// Throws the first terminal I/O failure exposed by the concrete terminal.
+    func throwPendingTerminalFailure() throws {
+        guard let failureReporter = terminal as? any TerminalFailureReporting,
+              let failure = failureReporter.takeIOFailure() else {
+            return
+        }
+        throw failure
+    }
+
     func cleanup() {
         terminal.disableRawMode()
         terminal.showCursor()

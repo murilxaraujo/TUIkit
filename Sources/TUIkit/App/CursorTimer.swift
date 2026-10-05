@@ -8,26 +8,24 @@ import Foundation
 
 /// Drives the cursor animation for TextField and SecureField.
 ///
-/// `CursorTimer` maintains two phase values for different animation styles:
+/// `CursorTimer` derives two phase values for different animation styles:
 /// - `blinkVisible`: Boolean for sharp on/off blinking
 /// - `pulsePhase`: Smooth 0-1 sine wave for pulsing
 ///
-/// The timer runs in a structured Swift concurrency task, independently from
-/// the `PulseTimer` (which handles focus indicators), to allow different
-/// animation speeds and precise control over cursor timing without blocking the
-/// terminal interaction loop.
+/// The application event loop owns animation deadlines, so this type never
+/// creates a background timer or invalidates an idle application.
 ///
 /// ## Animation Speeds
 ///
 /// The speed is controlled by ``TextCursorStyle/Speed``:
-/// - `.slow`: 800ms cycle (visible 400ms, hidden 400ms)
-/// - `.regular`: 530ms cycle (visible 265ms, hidden 265ms)
-/// - `.fast`: 300ms cycle (visible 150ms, hidden 150ms)
+/// - `.slow`: 1000ms cycle (visible 500ms, hidden 500ms)
+/// - `.regular`: 660ms cycle (visible 330ms, hidden 330ms)
+/// - `.fast`: 400ms cycle (visible 200ms, hidden 200ms)
 ///
 /// ## Usage
 ///
 /// ```swift
-/// let cursor = CursorTimer(renderNotifier: appState)
+/// let cursor = CursorTimer(clock: runtimeClock)
 /// cursor.start()
 /// // In render code:
 /// if cursor.blinkVisible(for: .regular) {
@@ -35,33 +33,19 @@ import Foundation
 /// }
 /// let phase = cursor.pulsePhase(for: .regular)
 /// ```
-final class CursorTimer: @unchecked Sendable {
-    /// Base tick interval in milliseconds.
-    /// We use a fast tick (50ms) and derive phases from elapsed time.
-    private let tickIntervalMs = 50
+@MainActor
+final class CursorTimer {
+    /// Monotonic runtime clock used for phase calculation.
+    private let clock: RuntimeClock
 
-    /// Lock protecting timer state shared between the main loop and timer queue.
-    private let lock = NSLock()
-
-    /// Elapsed ticks since timer started.
-    private var elapsedTicks = 0
-
-    /// The structured concurrency task that drives ticks.
-    private var task: Task<Void, Never>?
-
-    /// The render notifier to trigger re-renders.
-    private weak var renderNotifier: AppState?
+    /// Monotonic timestamp at which the current cursor cycle began.
+    private var startTime: TimeInterval?
 
     /// Creates a new cursor timer.
     ///
-    /// - Parameter renderNotifier: The app state to notify when a re-render
-    ///   is needed. Held weakly to avoid retain cycles.
-    init(renderNotifier: AppState) {
-        self.renderNotifier = renderNotifier
-    }
-
-    deinit {
-        stop()
+    /// - Parameter clock: Monotonic runtime clock used for animation phases.
+    init(clock: RuntimeClock) {
+        self.clock = clock
     }
 }
 
@@ -74,10 +58,7 @@ extension CursorTimer {
     /// - Returns: `true` if cursor should be visible, `false` if hidden.
     func blinkVisible(for speed: TextCursorStyle.Speed) -> Bool {
         let cycleMs = speed.blinkCycleMs
-        lock.lock()
-        let ticks = elapsedTicks
-        lock.unlock()
-        let elapsedMs = ticks * tickIntervalMs
+        let elapsedMs = elapsedMilliseconds
         let positionInCycle = elapsedMs % cycleMs
         // Visible for first half of cycle
         return positionInCycle < (cycleMs / 2)
@@ -93,10 +74,7 @@ extension CursorTimer {
     /// - Returns: Phase value between 0 and 1.
     func pulsePhase(for speed: TextCursorStyle.Speed) -> Double {
         let cycleMs = speed.pulseCycleMs
-        lock.lock()
-        let ticks = elapsedTicks
-        lock.unlock()
-        let elapsedMs = ticks * tickIntervalMs
+        let elapsedMs = elapsedMilliseconds
         let positionInCycle = elapsedMs % cycleMs
         let normalized = Double(positionInCycle) / Double(cycleMs)
         // Sine wave: 0 → 1 → 0 over the cycle
@@ -104,51 +82,20 @@ extension CursorTimer {
     }
 }
 
-// MARK: - Timer Control
+// MARK: - Phase Control
 
 extension CursorTimer {
-    /// Starts the cursor animation timer.
+    /// Starts the cursor animation phase clock.
     ///
-    /// If the timer is already running, this is a no-op.
+    /// If the phase clock is already active, this is a no-op.
     func start() {
-        lock.lock()
-        guard task == nil else {
-            lock.unlock()
-            return
-        }
-
-        let interval = tickIntervalMs
-        let task = Task.detached(priority: .utility) { [weak self] in
-            while !Task.isCancelled {
-                do {
-                    try await Task.sleep(for: .milliseconds(interval))
-                } catch {
-                    break
-                }
-
-                guard let self, !Task.isCancelled else { break }
-                self.tick()
-            }
-        }
-        self.task = task
-        lock.unlock()
+        guard startTime == nil else { return }
+        startTime = clock.now()
     }
 
-    /// Stops the cursor animation timer.
+    /// Stops the cursor animation phase clock.
     func stop() {
-        lock.lock()
-        task?.cancel()
-        task = nil
-        elapsedTicks = 0
-        lock.unlock()
-    }
-
-    private func tick() {
-        lock.lock()
-        elapsedTicks += 1
-        let notifier = renderNotifier
-        lock.unlock()
-        notifier?.setNeedsRender()
+        startTime = nil
     }
 
     /// Resets the cursor animation to the visible/bright state.
@@ -156,9 +103,17 @@ extension CursorTimer {
     /// Call this when a text field gains focus to ensure the cursor
     /// starts in a visible state.
     func reset() {
-        lock.lock()
-        elapsedTicks = 0
-        lock.unlock()
+        startTime = clock.now()
+    }
+}
+
+// MARK: - Private Helpers
+
+private extension CursorTimer {
+    /// Elapsed whole milliseconds in the current cursor cycle.
+    var elapsedMilliseconds: Int {
+        guard let startTime else { return 0 }
+        return Int(max(0, clock.now() - startTime) * 1_000)
     }
 }
 

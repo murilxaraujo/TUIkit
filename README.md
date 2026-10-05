@@ -5,7 +5,7 @@
     <img alt="i18n" src="https://img.shields.io/badge/i18n-5%20Languages-00d900">
     <img alt="License" src="https://img.shields.io/badge/License-MIT-00b300?style=flat">
     <a href="https://github.com/phranck/TUIkit/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/phranck/TUIkit/ci.yml?branch=main&label=CI&color=009900"></a>
-    <img alt="Tests" src="https://img.shields.io/badge/Tests-1172%2B_passing-005c00">
+    <img alt="Tests" src="https://img.shields.io/badge/Tests-1372_passing-005c00">
 </p>
 
 <img width="1200" height="630" alt="og-image@1x" src="https://github.com/user-attachments/assets/8bf99da8-e87c-4447-b3cb-a6f3f52c6d18" />
@@ -117,52 +117,6 @@ struct ContentView: View {
 - **Focus system**: Tab/Shift+Tab navigation, `.focusSection()` for grouped areas
 - **Render caching**: `.equatable()` for subtree memoization
 
-## Preview Your Views
-
-TUIkit includes a preview workflow for fast visual iteration without launching a full app. Previews are regular Swift executable targets, so they compile with your app code, run in the terminal, and can be watched from an editor or Xcode scheme.
-
-Create a preview executable target that depends on `TUIkit`, `TUIkitPreview`, and your app module, then declare previews with `TUIkitPreviewApp`:
-
-```swift
-import TUIkit
-import TUIkitPreview
-
-@main
-struct MyPreviews: TUIkitPreviewApp {
-    static var previews: [TUIPreview] {
-        TUIPreview("Dashboard", size: .desktop) {
-            DashboardView()
-        }
-
-        TUIPreview("Narrow Empty State", size: .narrow) {
-            DashboardView(items: [])
-        }
-    }
-}
-```
-
-Run a single preview directly, or use the package-level live preview runner:
-
-```bash
-swift run MyPreviews
-swift run MyPreviews -- --list
-swift run MyPreviews -- --preview dashboard --size 100x30
-
-swift run tuikit-preview -- --target MyPreviews --preview dashboard --size 100x30
-swift run tuikit-preview -- list --target MyPreviews
-swift package plugin tuikit-preview --target MyPreviews --preview dashboard
-```
-
-Add `.tuikit-preview.yml` to persist defaults (`target`, `defaultPreview`, `theme`, and `size`). Pass `--no-watch` for a one-shot build/render; by default the runner rebuilds and rerenders when Swift package files change.
-
-Use `--snapshot` when you want plain rendered output for fixtures, demos, or documentation generation:
-
-```bash
-swift run MyPreviews -- --preview dashboard --snapshot
-```
-
-See [docs/Previews.md](docs/Previews.md) for the full setup, target configuration, and recommended preview patterns.
-
 ## Run the Example App
 
 ```bash
@@ -238,6 +192,8 @@ TUIkit includes comprehensive i18n support with 5 languages and type-safe string
 import TUIkit
 
 struct MyView: View {
+    @Environment(\.localizationService) private var localization
+
     var body: some View {
         VStack {
             // Type-safe localized strings
@@ -246,7 +202,7 @@ struct MyView: View {
 
             // Switch language at runtime
             Button("Deutsch") {
-                AppState.shared.setLanguage(.german)
+                localization.setLanguage(.german)
             }
         }
     }
@@ -259,7 +215,7 @@ For complete documentation, see [Localization Guide](https://github.com/phranck/
 
 ## Architecture
 
-- **Modular package**: 5 Swift modules + 1 C target (see Project Structure below)
+- **Modular package**: 5 Swift modules with no native targets (see Project Structure below)
 - **No singletons for state**: All state flows through the Environment system
 - **Pure ANSI rendering**: No ncurses or other C dependencies
 - **Linux compatible**: Works on macOS and Linux (XDG paths supported)
@@ -269,11 +225,10 @@ For complete documentation, see [Localization Guide](https://github.com/phranck/
 
 ```
 Sources/
-├── CSTBImage/            C bindings for stb_image (PNG/JPEG decoding)
 ├── TUIkitCore/           Primitives, key events, frame buffer, concurrency helpers
 ├── TUIkitStyling/        Color, theme palettes, border styles
 ├── TUIkitView/           View protocol, ViewBuilder, State, Environment, Renderable
-├── TUIkitImage/          ASCII art converter, image loading (depends on CSTBImage)
+├── TUIkitImage/          ASCII art conversion and bounded pure Swift PNG/JPEG decoding
 ├── TUIkit/               Main module: App, Views, Modifiers, Focus, StatusBar, Notification
 │   ├── App/              App, Scene, WindowGroup
 │   ├── Environment/      Environment keys, service configuration
@@ -287,18 +242,29 @@ Sources/
 └── TUIkitExample/        Example app (executable target)
 
 Tests/
-└── TUIkitTests/          1172+ tests across 93 test files (including i18n consistency & localization tests)
+├── TUIkitCoreTests/      Core primitives and input parsing
+├── TUIkitStylingTests/   Colors, palettes, and theme behavior
+├── TUIkitViewTests/      View infrastructure, state, and rendering caches
+├── TUIkitImageTests/     Image data, conversion, loading, and decoding
+└── TUIkitTests/          Public API and runtime integration
 ```
+
+Test discovery covers 1372 tests across all isolated targets.
 
 ## Requirements
 
-- Swift 6.0+
+- Swift 6.0+ for package consumers; development and CI use exactly Swift 6.0.3
 - macOS 14+ or Linux
+
+Image decoding supports static PNG and JPEG input and always produces non-premultiplied 8-bit RGBA pixels. Audited decoder and checksum
+sources are vendored as namespaced Swift targets; the package graph contains no C, C++, or native decoder target.
 
 ## Developer Notes
 
 - Tests use Swift Testing (`@Test`, `#expect`): run with `swift test`
-- All 1172 tests run in parallel
+- Run the complete local macOS/Linux quality gate with `./scripts/test-linux.sh`
+- Generate the deployable DocC archive with `./scripts/generate-documentation.sh`
+- All 1372 tests run through Swift Testing; suites that isolate shared state run serially
 - The `Terminal` class handles raw mode and cursor control via POSIX `termios`
 - See [Known Limitations](docs/KnownLimitations.md) and [Terminal Compatibility](docs/TerminalCompatibility.md) when validating real terminal behavior.
 
@@ -317,4 +283,4 @@ Tests/
 
 ## License
 
-This repository has been published under the [MIT](https://mit-license.org) license.
+This repository has been published under the [MIT](https://layered.mit-license.org) license.

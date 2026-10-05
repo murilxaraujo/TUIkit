@@ -23,7 +23,7 @@
 ///     }
 /// }
 /// ```
-struct ModalPresentationModifier<Content: View, Modal: View>: View {
+public struct ModalPresentationModifier<Content: View, Modal: View>: View {
     /// The base content to render.
     let content: Content
 
@@ -33,7 +33,7 @@ struct ModalPresentationModifier<Content: View, Modal: View>: View {
     /// The modal content to present.
     let modal: Modal
 
-    var body: Never {
+    public var body: Never {
         fatalError("ModalPresentationModifier renders via Renderable")
     }
 }
@@ -44,7 +44,7 @@ extension ModalPresentationModifier: Renderable {
     /// A stable section ID for modal focus sections.
     private static var modalSectionID: String { "__modal__" }
 
-    func renderToBuffer(context: RenderContext) -> FrameBuffer {
+    public func renderToBuffer(context: RenderContext) -> FrameBuffer {
         // If not presented, just return base content
         guard isPresented.wrappedValue else {
             return TUIkit.renderToBuffer(content, context: context)
@@ -65,7 +65,7 @@ extension ModalPresentationModifier: Renderable {
         // The modal section becomes the active section, so Tab/arrows
         // only navigate within the modal's focusable elements.
         let sectionID = Self.modalSectionID
-        if context.allowsRenderSideEffects {
+        if context.phase == .render {
             focusManager.registerSection(id: sectionID)
             focusManager.activateSection(id: sectionID)
         }

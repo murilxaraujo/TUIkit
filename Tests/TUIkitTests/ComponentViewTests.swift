@@ -198,34 +198,35 @@ struct ForEachTests {
         #expect(generatedTexts == ["Alpha", "Beta"])
     }
 
-    @Test("ForEach renders generated views directly")
-    func forEachRendersDirectly() {
+    @Test("ForEach expands between static HStack children")
+    func forEachExpandsInsideTupleContent() {
         let items = [TestItem(id: "a", name: "Alpha"), TestItem(id: "b", name: "Beta")]
-        let forEach = ForEach(items) { item in
-            Text(item.name)
-        }
-
-        let buffer = renderToBuffer(forEach, context: testContext())
-        let content = buffer.lines.joined(separator: "\n")
-
-        #expect(content.contains("Alpha"))
-        #expect(content.contains("Beta"))
-    }
-
-    @Test("ForEach renders inside container content")
-    func forEachRendersInsideContainerContent() {
-        let items = [TestItem(id: "a", name: "Alpha"), TestItem(id: "b", name: "Beta")]
-        let panel = Panel("Items") {
+        let stack = HStack(spacing: 1) {
+            Text("Before")
             ForEach(items) { item in
                 Text(item.name)
             }
+            Text("After")
         }
 
-        let buffer = renderToBuffer(panel, context: testContext(width: 40))
-        let content = buffer.lines.joined(separator: "\n")
+        let buffer = renderToBuffer(stack, context: testContext())
 
-        #expect(content.contains("Alpha"))
-        #expect(content.contains("Beta"))
+        #expect(buffer.lines.map(\.stripped) == ["Before Alpha Beta After"])
+    }
+
+    @Test("ForEach expands through native builder arrays")
+    func forEachExpandsThroughBuilderArray() {
+        let stack = HStack(spacing: 1) {
+            for group in 1...2 {
+                ForEach(["A", "B"], id: \.self) { item in
+                    Text("\(group)\(item)")
+                }
+            }
+        }
+
+        let buffer = renderToBuffer(stack, context: testContext())
+
+        #expect(buffer.lines.map(\.stripped) == ["1A 1B 2A 2B"])
     }
 
     @Test("ForEach with empty array produces empty result")
@@ -235,12 +236,8 @@ struct ForEachTests {
             Text(item.name)
         }
 
-        #expect(forEach.data.isEmpty)
+        let buffer = renderToBuffer(forEach, context: testContext())
 
-        // Also test via ViewArray (which is what @ViewBuilder produces)
-        let viewArray = ViewArray<Text>([])
-        let context = testContext()
-        let buffer = renderToBuffer(viewArray, context: context)
         #expect(buffer.isEmpty)
     }
 }

@@ -188,7 +188,7 @@ private struct _TextAreaCore: View, Renderable, Layoutable {
         let layout = handler.lineLayout()
         let cursorLocation = handler.lineColumn(for: handler.cursorPosition, layout: layout)
         let renderer = TextAreaContentRenderer(prompt: prompt, isDisabled: isDisabled)
-        let contentLines = renderer.buildLines(
+        let contentLines = renderer.buildLines(TextAreaRenderInput(
             text: text.wrappedValue,
             layout: layout,
             cursorLocation: cursorLocation,
@@ -199,7 +199,7 @@ private struct _TextAreaCore: View, Renderable, Layoutable {
             cursorTimer: context.environment.cursorTimer,
             contentWidth: contentWidth,
             contentHeight: contentHeight
-        )
+        ))
 
         let capColor = palette.accent.opacity(ViewConstants.focusBorderDim)
         let openCap = ANSIRenderer.colorize(String(TerminalSymbols.openCap), foreground: capColor)

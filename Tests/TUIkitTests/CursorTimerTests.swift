@@ -1,7 +1,6 @@
-//  🖥️ TUIKit — Terminal UI Kit for Swift
+//  🖥️ TUIkit — Terminal UI Kit for Swift
 //  CursorTimerTests.swift
 //
-//  Created by LAYERED.work
 //  License: MIT
 
 import Testing
@@ -11,48 +10,21 @@ import Testing
 @MainActor
 @Suite("CursorTimer Tests")
 struct CursorTimerTests {
-
-    @Test("Initial blink state is visible")
-    func initialBlinkStateVisible() {
-        let appState = AppState()
-        let timer = CursorTimer(renderNotifier: appState)
-
-        #expect(timer.blinkVisible(for: .regular) == true)
-    }
-
-    @Test("Pulse phase stays within 0-1 range")
-    func pulsePhaseRange() {
-        let appState = AppState()
-        let timer = CursorTimer(renderNotifier: appState)
-
-        let phase = timer.pulsePhase(for: .regular)
-        #expect(phase >= 0 && phase <= 1)
-    }
-
-    @Test("Timer ticks request render from background task")
-    func timerTicksRequestRender() async throws {
-        let appState = AppState()
-        let timer = CursorTimer(renderNotifier: appState)
+    @Test("Blink and pulse phases follow the injected monotonic clock")
+    func phasesFollowClock() {
+        let timeSource = ManualTimeSource()
+        let timer = CursorTimer(clock: RuntimeClock { timeSource.now() })
 
         timer.start()
-        try await Task.sleep(for: .milliseconds(80))
-        timer.stop()
+        #expect(timer.blinkVisible(for: .regular))
 
-        #expect(appState.needsRender == true)
-    }
+        timeSource.advance(by: 0.33)
+        #expect(timer.blinkVisible(for: .regular) == false)
 
-    @Test("Stop cancels structured timer task")
-    func stopCancelsStructuredTimerTask() async throws {
-        let appState = AppState()
-        let timer = CursorTimer(renderNotifier: appState)
+        timeSource.advance(by: 0.07)
+        #expect(abs(timer.pulsePhase(for: .regular) - 1) < 0.000_001)
 
-        timer.start()
-        timer.stop()
-        appState.didRender()
-
-        try await Task.sleep(for: .milliseconds(80))
-
-        #expect(appState.needsRender == false)
-        #expect(timer.blinkVisible(for: .regular) == true)
+        timeSource.advance(by: 0.26)
+        #expect(timer.blinkVisible(for: .regular))
     }
 }

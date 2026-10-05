@@ -66,61 +66,67 @@ struct ContentView: View {
     @ViewBuilder
     private func pageContent(for page: DemoPage, path: Binding<[DemoPage]>) -> some View {
         switch page {
+        case .menu, .textStyles, .colors, .containers, .overlays, .layout, .buttons, .toggles:
+            corePageContent(for: page, path: path)
+        case .textFields, .secureFields, .radioButtons, .spinners, .lists, .tables, .sliders, .steppers,
+             .splitView, .dogfoodWorkflow, .imageFile, .imageURL:
+            additionalPageContent(for: page)
+        }
+    }
+
+    @ViewBuilder
+    private func corePageContent(for page: DemoPage, path: Binding<[DemoPage]>) -> some View {
+        switch page {
         case .menu:
             EmptyView()
         case .textStyles:
-            TextStylesPage()
-                .statusBarItems(subPageItems())
+            TextStylesPage().statusBarItems(subPageItems())
         case .colors:
-            ColorsPage()
-                .statusBarItems(subPageItems())
+            ColorsPage().statusBarItems(subPageItems())
         case .containers:
-            ContainersPage()
-                .statusBarItems(subPageItems())
+            ContainersPage().statusBarItems(subPageItems())
         case .overlays:
             OverlaysPage(onBack: { path.wrappedValue.removeAll() })
         case .layout:
-            LayoutPage()
-                .statusBarItems(subPageItems())
+            LayoutPage().statusBarItems(subPageItems())
         case .buttons:
-            ButtonsPage()
-                .statusBarItems(subPageItems())
+            ButtonsPage().statusBarItems(subPageItems())
         case .toggles:
-            TogglePage()
-                .statusBarItems(subPageItems())
+            TogglePage().statusBarItems(subPageItems())
+        default:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private func additionalPageContent(for page: DemoPage) -> some View {
+        switch page {
         case .textFields:
-            TextFieldPage()
-                .statusBarItems(subPageItems())
+            TextFieldPage().statusBarItems(subPageItems())
         case .secureFields:
-            SecureFieldPage()
-                .statusBarItems(subPageItems())
+            SecureFieldPage().statusBarItems(subPageItems())
         case .radioButtons:
-            RadioButtonPage()
-                .statusBarItems(subPageItems())
+            RadioButtonPage().statusBarItems(subPageItems())
         case .spinners:
-            SpinnersPage()
-                .statusBarItems(subPageItems())
+            SpinnersPage().statusBarItems(subPageItems())
         case .lists:
-            ListPage()
-                .statusBarItems(subPageItems())
+            ListPage().statusBarItems(subPageItems())
         case .tables:
-            TablePage()
-                .statusBarItems(subPageItems())
+            TablePage().statusBarItems(subPageItems())
         case .sliders:
-            SliderPage()
-                .statusBarItems(subPageItems())
+            SliderPage().statusBarItems(subPageItems())
         case .steppers:
-            StepperPage()
-                .statusBarItems(subPageItems())
+            StepperPage().statusBarItems(subPageItems())
         case .splitView:
-            SplitViewPage()
-                .statusBarItems(subPageItems())
+            SplitViewPage().statusBarItems(subPageItems())
         case .dogfoodWorkflow:
             TaskWorkflowPage()
         case .imageFile:
             ImageFilePage()
         case .imageURL:
             ImageURLPage()
+        default:
+            EmptyView()
         }
     }
 

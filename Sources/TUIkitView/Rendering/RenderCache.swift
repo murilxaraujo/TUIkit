@@ -18,7 +18,7 @@ import TUIkitCore
 ///
 /// ## How It Works
 ///
-/// When an ``EquatableView<V>`` renders, it:
+/// When an ``EquatableView`` renders, it:
 /// 1. Looks up a cached entry by the current `ViewIdentity`
 /// 2. Compares the new view value with the stored snapshot (`Equatable.==`)
 /// 3. Checks that the available size hasn't changed
@@ -48,18 +48,15 @@ import TUIkitCore
 ///
 /// ## Thread Safety
 ///
-/// `RenderCache` is primarily owned by the render loop, but state updates can
-/// request targeted cache invalidation from background `.task` work. Mutable
-/// cache state is protected by a lock.
+/// `RenderCache` is accessed only from the main thread (TUIKit's single-threaded
+/// event loop). No locking is required.
 public final class RenderCache: @unchecked Sendable {
-    /// Lock protecting cached entries, active identities, and statistics.
-    private let lock = NSLock()
 
     /// Aggregated cache performance statistics.
     ///
     /// Tracks hit/miss/store/clear counts. Use ``stats`` for cumulative
-    /// totals, or ``frameStats`` (after ``logFrameStats()``) for the
-    /// delta since the last ``beginRenderPass()``.
+    /// totals. ``logFrameStats()`` logs the delta since the last
+    /// ``beginRenderPass()``.
     public struct Stats: Equatable {
         /// Number of successful cache lookups (view and size matched).
         public var hits: Int = 0
@@ -127,36 +124,60 @@ public final class RenderCache: @unchecked Sendable {
         /// The available height when this entry was cached.
         public let contextHeight: Int
 
-        /// Creates a new cache entry.
+        /// The environment fingerprint captured at store time.
+        ///
+        /// Part of the cache key: a lookup with a differing fingerprint
+        /// misses so environment-driven output changes (foreground style,
+        /// focus indicator) never serve a stale buffer. `nil` for entries
+        /// stored on the live path, which only match `nil` lookups.
+        package let environmentFingerprint: EnvironmentFingerprint?
+
+        /// Creates a new cache entry without an environment fingerprint.
         public init(viewSnapshot: Any, buffer: FrameBuffer, contextWidth: Int, contextHeight: Int) {
+            self.init(
+                viewSnapshot: viewSnapshot,
+                buffer: buffer,
+                contextWidth: contextWidth,
+                contextHeight: contextHeight,
+                environmentFingerprint: nil
+            )
+        }
+
+        /// Creates a new cache entry with an environment fingerprint.
+        package init(
+            viewSnapshot: Any,
+            buffer: FrameBuffer,
+            contextWidth: Int,
+            contextHeight: Int,
+            environmentFingerprint: EnvironmentFingerprint?
+        ) {
             self.viewSnapshot = viewSnapshot
             self.buffer = buffer
             self.contextWidth = contextWidth
             self.contextHeight = contextHeight
+            self.environmentFingerprint = environmentFingerprint
         }
     }
 
     /// Cached entries keyed by view identity.
     private var entries: [ViewIdentity: CacheEntry] = [:]
 
+    /// Identities whose content registered per-pass effects while rendering.
+    ///
+    /// Flagged identities never produce cache hits: their subtree must
+    /// render every frame so its effect registrations reach the frame's
+    /// collectors. The classification refreshes on every miss rendering
+    /// and is garbage-collected with the identity.
+    private var effectBearingIdentities: Set<ViewIdentity> = []
+
     /// Identities seen during the current render pass (for garbage collection).
     private var activeIdentities: Set<ViewIdentity> = []
 
     /// Cumulative cache performance statistics.
-    private var currentStats = Stats()
-
-    /// Snapshot of cumulative cache performance statistics.
-    public var stats: Stats {
-        lock.lock()
-        defer { lock.unlock() }
-        return currentStats
-    }
+    public private(set) var stats = Stats()
 
     /// Stats snapshot taken at the start of each render pass (for per-frame deltas).
     private var statsAtFrameStart = Stats()
-
-    /// The global shared instance.
-    public static let shared = RenderCache()
 
     /// Whether debug logging is enabled via the `TUIKIT_DEBUG_RENDER` environment variable.
     public static let debugEnabled: Bool = {
@@ -167,18 +188,10 @@ public final class RenderCache: @unchecked Sendable {
     public init() {}
 
     /// The number of cached entries (for testing/debugging).
-    public var count: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return entries.count
-    }
+    public var count: Int { entries.count }
 
     /// Whether the cache is empty.
-    public var isEmpty: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return entries.isEmpty
-    }
+    public var isEmpty: Bool { entries.isEmpty }
 }
 
 // MARK: - Internal API
@@ -202,37 +215,67 @@ extension RenderCache {
         contextWidth: Int,
         contextHeight: Int
     ) -> FrameBuffer? {
-        lock.lock()
+        lookup(
+            identity: identity,
+            view: view,
+            contextWidth: contextWidth,
+            contextHeight: contextHeight,
+            environmentFingerprint: nil
+        )
+    }
+
+    /// Looks up a cached buffer, additionally matching the environment
+    /// fingerprint captured when the entry was stored.
+    ///
+    /// - Parameters:
+    ///   - identity: The view's structural identity.
+    ///   - view: The current view value to compare against the snapshot.
+    ///   - contextWidth: The current available width.
+    ///   - contextHeight: The current available height.
+    ///   - environmentFingerprint: The current position's environment
+    ///     fingerprint; must equal the stored one for a hit.
+    /// - Returns: The cached ``FrameBuffer`` if valid, or `nil` on miss.
+    package func lookup<V: Equatable>(
+        identity: ViewIdentity,
+        view: V,
+        contextWidth: Int,
+        contextHeight: Int,
+        environmentFingerprint: EnvironmentFingerprint?
+    ) -> FrameBuffer? {
+        guard !effectBearingIdentities.contains(identity) else {
+            stats.misses += 1
+            logDebug("MISS (carries effects) \(identity.path)")
+            return nil
+        }
         guard let entry = entries[identity] else {
-            currentStats.misses += 1
-            lock.unlock()
+            stats.misses += 1
             logDebug("MISS (no entry) \(identity.path)")
             return nil
         }
         guard let oldView = entry.viewSnapshot as? V else {
-            currentStats.misses += 1
-            lock.unlock()
+            stats.misses += 1
             logDebug("MISS (type mismatch) \(identity.path)")
             return nil
         }
         guard entry.contextWidth == contextWidth,
               entry.contextHeight == contextHeight else {
-            currentStats.misses += 1
-            lock.unlock()
+            stats.misses += 1
             logDebug("MISS (size changed) \(identity.path)")
             return nil
         }
+        guard entry.environmentFingerprint == environmentFingerprint else {
+            stats.misses += 1
+            logDebug("MISS (environment changed) \(identity.path)")
+            return nil
+        }
         guard oldView == view else {
-            currentStats.misses += 1
-            lock.unlock()
+            stats.misses += 1
             logDebug("MISS (view changed) \(identity.path)")
             return nil
         }
-        currentStats.hits += 1
-        let buffer = entry.buffer
-        lock.unlock()
+        stats.hits += 1
         logDebug("HIT \(identity.path)")
-        return buffer
+        return entry.buffer
     }
 
     /// Stores a rendered buffer for a view identity.
@@ -252,15 +295,43 @@ extension RenderCache {
         contextWidth: Int,
         contextHeight: Int
     ) {
-        lock.lock()
-        currentStats.stores += 1
+        store(
+            identity: identity,
+            view: view,
+            buffer: buffer,
+            contextWidth: contextWidth,
+            contextHeight: contextHeight,
+            environmentFingerprint: nil
+        )
+    }
+
+    /// Stores a rendered buffer together with the environment fingerprint
+    /// of the rendering position.
+    ///
+    /// - Parameters:
+    ///   - identity: The view's structural identity.
+    ///   - view: The view value to snapshot for future comparisons.
+    ///   - buffer: The rendered output to cache.
+    ///   - contextWidth: The available width during rendering.
+    ///   - contextHeight: The available height during rendering.
+    ///   - environmentFingerprint: The environment fingerprint to require
+    ///     on future lookups.
+    package func store<V: Equatable>(
+        identity: ViewIdentity,
+        view: V,
+        buffer: FrameBuffer,
+        contextWidth: Int,
+        contextHeight: Int,
+        environmentFingerprint: EnvironmentFingerprint?
+    ) {
+        stats.stores += 1
         entries[identity] = CacheEntry(
             viewSnapshot: view,
             buffer: buffer,
             contextWidth: contextWidth,
-            contextHeight: contextHeight
+            contextHeight: contextHeight,
+            environmentFingerprint: environmentFingerprint
         )
-        lock.unlock()
         logDebug("STORE \(identity.path)")
     }
 
@@ -271,18 +342,59 @@ extension RenderCache {
     ///
     /// - Parameter identity: The view identity to mark as active.
     public func markActive(_ identity: ViewIdentity) {
-        lock.lock()
         activeIdentities.insert(identity)
-        lock.unlock()
+    }
+
+    /// Keeps cache entries below a cached subtree root active without
+    /// traversing the subtree.
+    ///
+    /// On an `EquatableView` cache hit the subtree is skipped, so nested
+    /// entries never mark themselves active and would be swept by
+    /// ``removeInactive()``. Mirrors `StateStorage.markSubtreeActive`:
+    /// every entry at or below the root survives the frame's GC.
+    ///
+    /// - Parameter root: The cached subtree's root identity.
+    package func markSubtreeActive(_ root: ViewIdentity) {
+        activeIdentities.formUnion(entries.keys.filter { identity in
+            identity == root || root.isAncestor(of: identity)
+        })
+    }
+
+    /// Classifies whether an identity's content registered per-pass effects
+    /// while rendering.
+    ///
+    /// Flagging drops any stored buffer and makes every future ``lookup``
+    /// miss, so the subtree renders each frame and its registrations reach
+    /// the frame's collectors. Unflagging (content re-classified as
+    /// effect-free) re-enables normal caching; the caller stores the fresh
+    /// buffer in the same rendering.
+    ///
+    /// - Parameters:
+    ///   - carriesEffects: Whether the content registered effects during
+    ///     its most recent miss rendering.
+    ///   - identity: The view's structural identity.
+    package func setCarriesEffects(_ carriesEffects: Bool, for identity: ViewIdentity) {
+        if carriesEffects {
+            effectBearingIdentities.insert(identity)
+            entries.removeValue(forKey: identity)
+        } else {
+            effectBearingIdentities.remove(identity)
+        }
+    }
+
+    /// Whether the identity is currently classified as effect-bearing.
+    ///
+    /// - Parameter identity: The view's structural identity.
+    /// - Returns: True when ``lookup`` bypasses the cache for this identity.
+    package func carriesEffects(_ identity: ViewIdentity) -> Bool {
+        effectBearingIdentities.contains(identity)
     }
 
     /// Begins a new render pass by clearing the active identity set
     /// and snapshotting the current stats for per-frame delta calculation.
     public func beginRenderPass() {
-        lock.lock()
         activeIdentities.removeAll(keepingCapacity: true)
-        statsAtFrameStart = currentStats
-        lock.unlock()
+        statsAtFrameStart = stats
     }
 
     /// Removes cache entries for views no longer in the tree.
@@ -290,12 +402,13 @@ extension RenderCache {
     /// Any entry whose identity was not marked active during this render pass
     /// is removed. Prevents memory leaks from permanently removed views.
     public func removeInactive() {
-        lock.lock()
         let staleKeys = entries.keys.filter { !activeIdentities.contains($0) }
         for key in staleKeys {
             entries.removeValue(forKey: key)
         }
-        lock.unlock()
+        effectBearingIdentities = effectBearingIdentities.filter {
+            activeIdentities.contains($0)
+        }
     }
 
     /// Clears all cached entries.
@@ -305,12 +418,9 @@ extension RenderCache {
     /// For state changes that only affect a subtree, prefer
     /// ``clearAffected(by:)``.
     public func clearAll() {
-        lock.lock()
-        currentStats.clears += 1
-        let entryCount = entries.count
+        stats.clears += 1
+        logDebug("CLEAR ALL (\(entries.count) entries)")
         entries.removeAll(keepingCapacity: true)
-        lock.unlock()
-        logDebug("CLEAR ALL (\(entryCount) entries)")
     }
 
     /// Clears cached entries affected by a state change at the given identity.
@@ -321,8 +431,7 @@ extension RenderCache {
     ///
     /// - Parameter identity: The identity of the view whose state changed.
     public func clearAffected(by identity: ViewIdentity) {
-        lock.lock()
-        currentStats.subtreeClears += 1
+        stats.subtreeClears += 1
         let staleKeys = entries.keys.filter { cached in
             cached == identity
                 || cached.isAncestor(of: identity)
@@ -331,39 +440,31 @@ extension RenderCache {
         for key in staleKeys {
             entries.removeValue(forKey: key)
         }
-        let totalCount = entries.count + staleKeys.count
-        lock.unlock()
-        logDebug("CLEAR AFFECTED by \(identity.path): \(staleKeys.count) of \(totalCount) entries")
+        logDebug("CLEAR AFFECTED by \(identity.path): \(staleKeys.count) of \(entries.count + staleKeys.count) entries")
     }
 
     /// Removes all cached entries, resets GC state, and clears statistics.
     public func reset() {
-        lock.lock()
         entries.removeAll()
+        effectBearingIdentities.removeAll()
         activeIdentities.removeAll()
-        currentStats = Stats()
+        stats = Stats()
         statsAtFrameStart = Stats()
-        lock.unlock()
     }
 
     /// Resets the cumulative statistics counters to zero.
     public func resetStats() {
-        lock.lock()
-        currentStats = Stats()
-        lock.unlock()
+        stats = Stats()
     }
 
     /// Logs a per-frame summary to stderr if debug logging is enabled.
     ///
     /// Call this at the end of each render pass (after ``removeInactive()``)
     /// to emit a one-line summary showing **this frame's** cache activity
-    /// (delta since ``beginRenderPass()``) plus the current entry count.
+    /// (delta since `beginRenderPass()`) plus the current entry count.
     public func logFrameStats() {
         guard Self.debugEnabled else { return }
-        lock.lock()
-        let frame = currentStats.delta(since: statsAtFrameStart)
-        let entryCount = entries.count
-        lock.unlock()
+        let frame = stats.delta(since: statsAtFrameStart)
         let rate = frame.lookups > 0
             ? String(format: "%.0f%%", frame.hitRate * 100)
             : "n/a"
@@ -371,7 +472,7 @@ extension RenderCache {
             "FRAME — hits: \(frame.hits), misses: \(frame.misses), "
                 + "stores: \(frame.stores), clears: \(frame.clears), "
                 + "subtreeClears: \(frame.subtreeClears), "
-                + "entries: \(entryCount), hit rate: \(rate)"
+                + "entries: \(entries.count), hit rate: \(rate)"
         )
     }
 }

@@ -4,7 +4,6 @@
 //  Created by LAYERED.work
 //  License: MIT
 
-import Foundation
 import Testing
 
 @testable import TUIkit
@@ -15,15 +14,13 @@ struct PulseTimerTests {
 
     @Test("Initial phase is zero")
     func initialPhaseZero() {
-        let appState = AppState()
-        let timer = PulseTimer(renderNotifier: appState)
+        let timer = PulseTimer(clock: RuntimeClock { 0 })
         #expect(timer.phase == 0)
     }
 
     @Test("Phase stays within 0-1 range")
     func phaseRange() {
-        let appState = AppState()
-        let timer = PulseTimer(renderNotifier: appState)
+        let timer = PulseTimer(clock: RuntimeClock { 0 })
 
         // Phase is computed from sin(), which for our mapping gives 0–1
         let phase = timer.phase
@@ -32,8 +29,7 @@ struct PulseTimerTests {
 
     @Test("Start and stop are balanced")
     func startStopBalanced() {
-        let appState = AppState()
-        let timer = PulseTimer(renderNotifier: appState)
+        let timer = PulseTimer(clock: RuntimeClock { 0 })
 
         // Should not crash when stopped without starting
         timer.stop()
@@ -48,30 +44,16 @@ struct PulseTimerTests {
         timer.stop()
     }
 
-    @Test("Timer ticks request render from background task")
-    func timerTicksRequestRender() async throws {
-        let appState = AppState()
-        let timer = PulseTimer(renderNotifier: appState)
+    @Test("Phase follows the injected monotonic clock")
+    func phaseFollowsClock() {
+        let timeSource = ManualTimeSource()
+        let timer = PulseTimer(clock: RuntimeClock { timeSource.now() })
 
         timer.start()
-        try await Task.sleep(for: .milliseconds(130))
-        timer.stop()
+        timeSource.advance(by: 1)
+        #expect(abs(timer.phase - 1) < 0.000_001)
 
-        #expect(appState.needsRender == true)
-    }
-
-    @Test("Stop cancels structured timer task")
-    func stopCancelsStructuredTimerTask() async throws {
-        let appState = AppState()
-        let timer = PulseTimer(renderNotifier: appState)
-
-        timer.start()
-        timer.stop()
-        appState.didRender()
-
-        try await Task.sleep(for: .milliseconds(130))
-
-        #expect(appState.needsRender == false)
-        #expect(timer.phase == 0)
+        timeSource.advance(by: 1)
+        #expect(abs(timer.phase) < 0.000_001)
     }
 }

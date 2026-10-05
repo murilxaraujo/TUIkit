@@ -37,7 +37,7 @@ struct MyApp: App {
 - **Theming system**: 5 built-in phosphor themes with full RGB color support
 - **Focus management**: Keyboard-driven navigation between interactive elements
 - **Status bar**: Configurable shortcut bar with context stack
-- **No dependencies**: Pure Swift, no ncurses or other C libraries
+- **No native dependencies**: Pure Swift rendering and image decoding, with no ncurses or other C libraries
 - **Cross-platform**: macOS and Linux
 
 ## Topics
@@ -63,6 +63,7 @@ struct MyApp: App {
 - <doc:PaletteReference>
 - <doc:ListAndTable>
 - <doc:LayoutSystem>
+- <doc:ImageDecoding>
 
 ### App Structure
 
@@ -70,27 +71,6 @@ struct MyApp: App {
 - ``Scene``
 - ``WindowGroup``
 - ``renderOnce(content:)``
-
-## Previewing Views
-
-Use the `TUIkitPreview` product for fast visual iteration in a terminal preview executable:
-
-```swift
-import TUIkit
-import TUIkitPreview
-
-@main
-struct MyPreviews: TUIkitPreviewApp {
-    static var previews: [TUIPreview] {
-        TUIPreview("Dashboard", size: .desktop) {
-            DashboardView()
-        }
-    }
-}
-```
-
-Run it directly with `swift run MyPreviews`, select previews with `--preview`, and use `swift run tuikit-preview -- --target MyPreviews --preview dashboard` (or the SwiftPM `tuikit-preview` command plugin) for a live edit/render loop. See `docs/Previews.md` for full setup guidance.
-
 
 ### Views
 
@@ -102,6 +82,14 @@ Run it directly with `swift run MyPreviews`, select previews with `--preview`, a
 - ``AnyView``
 - ``Spinner``
 - ``Divider``
+
+### Image Decoding
+
+- ``PlatformImageLoader``
+- ``ImageDecodingLimits``
+- ``ImageLoadError``
+- ``RGBAImage``
+- ``RGBA``
 
 ### Interactive Controls
 
@@ -204,7 +192,7 @@ Run it directly with `swift run MyPreviews`, select previews with `--preview`, a
 
 - ``ViewBuilder``
 - ``ViewModifier``
-- ``ModifiedView``
+- ``ModifiedContent``
 - ``EquatableView``
 
 ### Focus System

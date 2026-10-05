@@ -83,9 +83,40 @@ ContentView()
     .environment(\.myCustomValue, "custom")
 ```
 
+## @Bindable
+
+``Bindable`` derives bindings from the mutable properties of `@Observable`
+model objects:
+
+```swift
+@Observable
+final class Profile {
+    var name = ""
+}
+
+struct ProfileEditor: View {
+    @Bindable var profile: Profile
+
+    var body: some View {
+        TextField("Name", text: $profile.name)
+    }
+}
+```
+
+## Custom Dynamic Properties
+
+Conform to ``DynamicProperty`` to compose framework wrappers inside your own
+property types. Nested wrappers hydrate with the owning view's identity, and
+`update()` runs before every `body` evaluation.
+
 ## @AppStorage
 
-``AppStorage`` persists values across app launches using `UserDefaults`:
+``AppStorage`` persists values across app launches using the application's
+runtime-owned storage backend. TUIkit apps use ``JSONFileStorage`` by
+default. SwiftUI's typed initializer families (`Bool`, `Int`, `Double`,
+`String`, `URL`, `Data`, `Date`, raw-representable enums, and their optional
+variants) are available; any other `Codable` value works as an additive
+convenience:
 
 ```swift
 struct SettingsView: View {
@@ -96,6 +127,27 @@ struct SettingsView: View {
     }
 }
 ```
+
+Pass an explicit backend when a property wrapper is created outside the app
+runtime or needs dedicated storage:
+
+```swift
+@AppStorage("username", store: MyStorageBackend()) var username = "Guest"
+```
+
+An `@AppStorage` property accessed before any runtime hydrates it falls back
+to volatile in-memory storage: nothing reaches the file system without an
+owning runtime or an explicit backend.
+
+### Persistence Guarantees
+
+``JSONFileStorage`` captures an immutable snapshot for every mutation and
+persists snapshots through one ordered writer, so an older state can never
+overwrite a newer one. `synchronize()` returns only after every previously
+issued write has completed; the runtime flushes storage this way during
+cleanup. Persistence failures are reported as ``StoragePersistenceError``
+values whose reasons are sanitized: they identify the failing step and error
+code, but never contain file paths or stored content.
 
 ## How State Survives Re-Rendering
 
@@ -110,30 +162,37 @@ This path is built automatically during rendering based on:
 - The view's type name
 - Its position among siblings (child index)
 - Conditional branches (`true`/`false` for `if`/`else`)
+- Nested modifier and runtime slots
 
 ### Persistent State Storage
 
-All `@State` values live in a central `StateStorage` (owned by `TUIContext`), keyed by:
+All `@State` values live in the owning runtime's `StateStorage`, keyed by:
 - The view's structural identity
 - The property's declaration index within the view (0, 1, 2, ...)
 
-When `@State var count = 0` is declared, the `init` checks if a persistent value already
-exists for this position. If it does, the existing value is used instead of the default.
+When `@State var count = 0` is constructed, it initially holds the declared default.
+Immediately before the renderer evaluates that view's `body`, it binds each direct dynamic
+property to the persistent location at the view's final structural identity. A reconstructed
+view therefore reads the stored value instead of resetting to its default.
 
 ### Re-Render Trigger
 
 When a ``State`` value changes:
 
-1. The `StateBox` triggers `RenderNotifier.current` -> `AppState.setNeedsRender()`
-2. The observer registered by `AppRunner` requests a re-render
+1. The `StateBox` sends a subtree invalidation to its runtime's `RenderInvalidationSink`
+2. That runtime's `AppState` notifies the observer registered by `AppRunner`
 3. The main loop re-evaluates `app.body` fresh: reconstructing all views
-4. Each `@State.init` self-hydrates from `StateStorage`, recovering persisted values
-5. The new ``FrameBuffer`` output is written to the terminal
+4. The renderer rebinds each view's dynamic properties to the same runtime's `StateStorage`
+5. The owning runtime clears the affected cached subtree and writes the new ``FrameBuffer``
+
+Observable dependencies read while evaluating `body` are tracked at the same committed
+identity. Re-evaluating an identity replaces its active observation generation, so callbacks
+from earlier view values become inert. Registrations are removed when their identity unmounts.
 
 ### Garbage Collection
 
 Views that disappear from the tree (e.g., a conditional branch switches) have their state
-automatically cleaned up at the end of each render pass. `ConditionalView` also immediately
+automatically cleaned up at the end of each render pass. `_ConditionalContent` also immediately
 invalidates the inactive branch's state to prevent stale values.
 
 This is simple and predictable: the view tree is fully re-evaluated each frame (no virtual DOM), with persistent state. Terminal output is then diffed at the line level: only changed lines are written. See <doc:RenderCycle> for details on the output optimization pipeline.

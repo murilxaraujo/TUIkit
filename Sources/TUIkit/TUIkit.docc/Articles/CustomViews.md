@@ -119,28 +119,30 @@ SettingsGroup("Network") {
 
 ## View Modifiers
 
-A ``ViewModifier`` transforms an already-rendered ``FrameBuffer``. Use this when your transformation operates on the output of any view:
+A ``ViewModifier`` composes a replacement view around the content it is
+applied to — exactly like SwiftUI. Implement `body(content:)` and place the
+received `content` placeholder wherever the modified view should appear:
 
 ```swift
-struct HighlightModifier: ViewModifier {
-    let color: Color
+struct SectionCard: ViewModifier {
+    let title: String
 
-    func modify(buffer: FrameBuffer, context: RenderContext) -> FrameBuffer {
-        // Transform each line in the buffer
-        var result = FrameBuffer()
-        for line in buffer.lines {
-            result.appendLine(ANSIRenderer.applyPersistentBackground(to: line, color: color))
+    func body(content: Content) -> some View {
+        VStack {
+            Text(title).bold()
+            content
         }
-        return result
+        .padding()
+        .border()
     }
 }
 ```
 
-Apply it using `.modifier(_:)`:
+Apply it using `.modifier(_:)`, which produces a ``ModifiedContent`` value:
 
 ```swift
-Text("Important!")
-    .modifier(HighlightModifier(color: .red))
+Text("Details")
+    .modifier(SectionCard(title: "Info"))
 ```
 
 ### Convenience Extensions
@@ -149,24 +151,23 @@ For a cleaner API, add a `View` extension:
 
 ```swift
 extension View {
-    func highlighted(_ color: Color = .red) -> some View {
-        modifier(HighlightModifier(color: color))
+    func sectionCard(_ title: String) -> some View {
+        modifier(SectionCard(title: title))
     }
 }
 
 // Usage
-Text("Important!").highlighted(.yellow)
+Text("Details").sectionCard("Info")
 ```
 
 ### When to Use ViewModifier
 
-Use ``ViewModifier`` when your transformation is a pure buffer-to-buffer operation: adding visual effects, changing backgrounds, or adjusting layout after rendering. The ``RenderContext`` gives you access to:
-
-| Property | Description |
-|----------|-------------|
-| `availableWidth` | Maximum width in columns for this view |
-| `availableHeight` | Maximum height in rows for this view |
-| `environment` | Current ``EnvironmentValues`` (palette, focus manager, etc.) |
+Use ``ViewModifier`` whenever a reusable decoration or wrapping applies to
+arbitrary content: cards, frames, badges, spacing conventions, environment
+tweaks. Everything the modifier body sets (environment values, padding,
+borders) flows into the wrapped content exactly as if it were written
+inline. Procedural buffer transformations remain framework-internal; custom
+modifiers compose existing views and modifiers instead.
 
 ## Type Erasure with AnyView
 
@@ -207,7 +208,7 @@ let view = Text("Hello").asAnyView()
 ### Supporting Types
 
 - ``ViewBuilder``
-- ``ModifiedView``
+- ``ModifiedContent``
 - ``AnyView``
 - ``RenderContext``
 - ``FrameBuffer``

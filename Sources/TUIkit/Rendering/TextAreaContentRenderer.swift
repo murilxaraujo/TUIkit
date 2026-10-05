@@ -12,45 +12,34 @@ struct TextAreaContentRenderer {
     let prompt: Text?
     let isDisabled: Bool
 
-    func buildLines(
-        text: String,
-        layout: TextAreaHandler.LineLayout,
-        cursorLocation: (line: Int, column: Int),
-        verticalOffset: Int,
-        isFocused: Bool,
-        palette: any Palette,
-        cursorStyle: TextCursorStyle,
-        cursorTimer: CursorTimer?,
-        contentWidth: Int,
-        contentHeight: Int
-    ) -> [String] {
-        let width = max(1, contentWidth)
-        let height = max(1, contentHeight)
-        let background = palette.accent.opacity(ViewConstants.focusBorderDim)
-        let foreground = isDisabled ? palette.foregroundTertiary : palette.foreground
+    func buildLines(_ input: TextAreaRenderInput) -> [String] {
+        let width = max(1, input.contentWidth)
+        let height = max(1, input.contentHeight)
+        let background = input.palette.accent.opacity(ViewConstants.focusBorderDim)
+        let foreground = isDisabled ? input.palette.foregroundTertiary : input.palette.foreground
 
-        if text.isEmpty && !isFocused, let prompt {
-            var lines = Array(repeating: blankLine(width: width, palette: palette, background: background), count: height)
-            lines[0] = promptLine(prompt, width: width, palette: palette, background: background)
+        if input.text.isEmpty && !input.isFocused, let prompt {
+            var lines = Array(repeating: blankLine(width: width, palette: input.palette, background: background), count: height)
+            lines[0] = promptLine(prompt, width: width, palette: input.palette, background: background)
             return lines
         }
 
-        let visibleLines = Array(layout.lines.dropFirst(verticalOffset).prefix(height))
+        let visibleLines = Array(input.layout.lines.dropFirst(input.verticalOffset).prefix(height))
         var rendered: [String] = []
         rendered.reserveCapacity(height)
 
         for row in 0..<height {
-            let logicalLine = verticalOffset + row
+            let logicalLine = input.verticalOffset + row
             let line = row < visibleLines.count ? visibleLines[row] : ""
-            let cursorColumn = isFocused && logicalLine == cursorLocation.line ? cursorLocation.column : nil
+            let cursorColumn = input.isFocused && logicalLine == input.cursorLocation.line ? input.cursorLocation.column : nil
             rendered.append(
                 renderLine(
                     line,
                     cursorColumn: cursorColumn,
-                    palette: palette,
+                    palette: input.palette,
                     foreground: foreground,
-                    cursorStyle: cursorStyle,
-                    cursorTimer: cursorTimer,
+                    cursorStyle: input.cursorStyle,
+                    cursorTimer: input.cursorTimer,
                     background: background,
                     width: width
                 )
@@ -139,4 +128,17 @@ struct TextAreaContentRenderer {
             return (true, color)
         }
     }
+}
+
+struct TextAreaRenderInput {
+    let text: String
+    let layout: TextAreaHandler.LineLayout
+    let cursorLocation: (line: Int, column: Int)
+    let verticalOffset: Int
+    let isFocused: Bool
+    let palette: any Palette
+    let cursorStyle: TextCursorStyle
+    let cursorTimer: CursorTimer?
+    let contentWidth: Int
+    let contentHeight: Int
 }
