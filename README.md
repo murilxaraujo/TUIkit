@@ -12,6 +12,8 @@
 
 # TUIkit
 
+> The original upstream project has moved to [git.layered.work/phranck/TUIkit](https://git.layered.work/phranck/TUIkit) and is archived.
+
 > [!TIP]
 > **☕ Support TUIkit Development**
 >
