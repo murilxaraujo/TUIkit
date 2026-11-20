@@ -303,7 +303,7 @@ Recommended starting order:
 
 1. Create backlog issues from this document.
 2. Continue terminal compatibility smoke validation using [Terminal Compatibility Matrix](TerminalCompatibility.md) and [Release Validation Checklist](ReleaseValidationChecklist.md).
-3. Continue actor-isolating runtime-owned managers with `TUIRuntimeActor` where APIs can become async-safe.
+3. Define a concrete actor-isolation boundary for runtime-owned managers before exposing a public runtime actor.
 4. Verify SwiftUI-equivalent API parity and document deviations.
 5. Expand focus/keyboard UX documentation and tests.
 6. Build out a realistic dogfood flow in the example app.

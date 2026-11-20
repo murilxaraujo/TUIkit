@@ -14,6 +14,22 @@ public enum ScrollViewInitialAnchor: Sendable, Equatable {
     case bottom
 }
 
+struct ScrollViewport: Sendable {
+    let offset: Int
+    let height: Int
+}
+
+private struct ScrollViewportKey: EnvironmentKey {
+    static let defaultValue: ScrollViewport? = nil
+}
+
+extension EnvironmentValues {
+    var scrollViewport: ScrollViewport? {
+        get { self[ScrollViewportKey.self] }
+        set { self[ScrollViewportKey.self] = newValue }
+    }
+}
+
 /// A vertically scrollable viewport for content that can exceed the available height.
 ///
 /// `ScrollView` is intentionally SwiftUI-shaped for the common vertical case:
@@ -29,8 +45,9 @@ public enum ScrollViewInitialAnchor: Sendable, Equatable {
 /// ```
 ///
 /// In a terminal, scrolling is keyboard-driven. When the scroll view is present
-/// in the hierarchy it handles `↑`, `↓`, Page Up, Page Down, Home, and End when
-/// those keys are not consumed by a focused text input.
+/// in the hierarchy it handles `↑` and `↓` when no control has focus, plus
+/// Page Up, Page Down, Home, and End when those keys are not consumed by a
+/// focused text input. Focused controls keep arrows for their own navigation.
 public struct ScrollView<Content: View>: View {
     let showsIndicators: Bool
     let initialAnchor: ScrollViewInitialAnchor
@@ -83,18 +100,19 @@ private struct _ScrollViewCore<Content: View>: View, Renderable, Layoutable {
 
     func renderToBuffer(context: RenderContext) -> FrameBuffer {
         let stateStorage = context.environment.stateStorage!
+        stateStorage.markActive(context.identity)
         let offsetKey = StateStorage.StateKey(identity: context.identity, propertyIndex: 0)
         let lastHeightKey = StateStorage.StateKey(identity: context.identity, propertyIndex: 1)
         let offsetBox: StateBox<Int> = stateStorage.storage(for: offsetKey, default: 0)
         let lastContentHeightBox: StateBox<Int> = stateStorage.storage(for: lastHeightKey, default: 0)
 
         let viewportHeight = max(1, context.availableHeight)
-        let contentBuffer = renderContent(context: context)
-        let contentHeight = contentBuffer.height
-        let visibleContentCapacityAtEdge = showsIndicators && contentHeight > viewportHeight
+        let measuredContent = measureContent(context: context)
+        let proposedContentHeight = max(viewportHeight, measuredContent.height)
+        let visibleContentCapacityAtEdge = showsIndicators && proposedContentHeight > viewportHeight
             ? max(1, viewportHeight - 1)
             : viewportHeight
-        let maxOffset = max(0, contentHeight - visibleContentCapacityAtEdge)
+        let maxOffset = max(0, proposedContentHeight - visibleContentCapacityAtEdge)
 
         let previousVisibleContentCapacityAtEdge = showsIndicators && lastContentHeightBox.value > viewportHeight
             ? max(1, viewportHeight - 1)
@@ -109,22 +127,46 @@ private struct _ScrollViewCore<Content: View>: View, Renderable, Layoutable {
         } else {
             offsetBox.value = min(max(0, offsetBox.value), maxOffset)
         }
+        let contentBuffer = renderContent(
+            context: context,
+            height: proposedContentHeight,
+            offset: offsetBox.value,
+            viewportHeight: viewportHeight
+        )
+        let contentHeight = contentBuffer.height
+        let actualMaxOffset = max(0, contentHeight - visibleContentCapacityAtEdge)
+        offsetBox.value = min(offsetBox.value, actualMaxOffset)
         lastContentHeightBox.value = contentHeight
 
         if context.allowsRenderSideEffects {
-            registerKeyHandlers(offsetBox: offsetBox, maxOffset: maxOffset, viewportHeight: viewportHeight, context: context)
+            registerKeyHandlers(offsetBox: offsetBox, maxOffset: actualMaxOffset, viewportHeight: viewportHeight, context: context)
         }
 
         return viewport(contentBuffer, offset: offsetBox.value, height: viewportHeight, context: context)
     }
 
-    private func renderContent(context: RenderContext) -> FrameBuffer {
+    private func measureContent(context: RenderContext) -> ViewSize {
+        var measureContext = context.withPhase(.measure)
+        measureContext.hasExplicitHeight = false
+        return measureChild(
+            content,
+            proposal: ProposedSize(width: context.availableWidth, height: nil),
+            context: measureContext
+        )
+    }
+
+    private func renderContent(
+        context: RenderContext,
+        height: Int,
+        offset: Int,
+        viewportHeight: Int
+    ) -> FrameBuffer {
         var contentContext = context
-        // Render enough content to measure and clip. This keeps ScrollView
-        // correct for arbitrary content. Lazy containers can still use the
-        // viewport context in future once scroll-offset environment support lands.
-        contentContext.availableHeight = max(context.availableHeight, 10_000)
+        contentContext.availableHeight = height
         contentContext.hasExplicitHeight = false
+        var environment = contentContext.environment
+        environment.scrollViewport = ScrollViewport(offset: offset, height: viewportHeight)
+        contentContext.environment = environment
         return TUIkit.renderToBuffer(content, context: contentContext)
     }
 
@@ -135,12 +177,15 @@ private struct _ScrollViewCore<Content: View>: View, Renderable, Layoutable {
         context: RenderContext
     ) {
         guard maxOffset > 0 else { return }
+        let focusManager = context.environment.focusManager
         context.environment.keyEventDispatcher!.addHandler { event in
             let oldOffset = offsetBox.value
             switch event.key {
             case .up:
+                guard focusManager.currentFocused == nil else { return false }
                 offsetBox.value = max(0, offsetBox.value - 1)
             case .down:
+                guard focusManager.currentFocused == nil else { return false }
                 offsetBox.value = min(maxOffset, offsetBox.value + 1)
             case .pageUp:
                 offsetBox.value = max(0, offsetBox.value - max(1, viewportHeight - 1))

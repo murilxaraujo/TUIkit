@@ -101,6 +101,10 @@ Public APIs **must** match SwiftUI signatures exactly unless terminal constraint
 - Search the codebase for similar patterns before implementing anything new
 - Consolidate and reuse before adding new functions or types
 
+### Agent workflow notes
+
+The optional `.agents/skills/` guides support code agents working on TUIkit. They are contributor documentation only; they are not required by the package or its consumers.
+
 ### Image Decoding
 
 - `TUIkitImage` supports static PNG and JPEG input with non-premultiplied 8-bit RGBA output.

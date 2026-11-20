@@ -100,6 +100,15 @@ private struct ConditionalStatefulNavigationDestination: View {
     }
 }
 
+private struct BodyCountingNavigationRoot: View {
+    let onBuild: () -> Void
+
+    var body: some View {
+        onBuild()
+        return Text("Root")
+    }
+}
+
 @MainActor
 @Suite("NavigationPath Tests", .serialized)
 struct NavigationPathTests {
@@ -196,6 +205,20 @@ struct NavigationStackTests {
         #expect(!buffer.lines.joined().contains("Root"))
     }
 
+    @Test("non-empty path collects root destinations without rendering root body twice")
+    func semanticPassDoesNotRenderRootTwice() {
+        var path: [Route] = [.detail]
+        var rootBuildCount = 0
+        let binding = Binding<[Route]>(get: { path }, set: { path = $0 })
+        let stack = NavigationStack(path: binding) {
+            BodyCountingNavigationRoot { rootBuildCount += 1 }
+                .navigationDestination(for: Route.self) { _ in Text("Detail") }
+        }
+
+        _ = renderToBuffer(stack, context: navigationTestContext())
+        #expect(rootBuildCount == 1)
+    }
+
     @Test("escape pops one path element and bubbles at root")
     func escapePopAndBubble() {
         var path: [Route] = [.detail, .other]
@@ -218,6 +241,29 @@ struct NavigationStackTests {
         context.environment.keyEventDispatcher!.clearHandlers()
         _ = renderToBuffer(stack, context: context)
         #expect(!context.environment.keyEventDispatcher!.dispatch(KeyEvent(key: .escape)))
+    }
+
+    @Test("destination Escape handler runs before stack pop")
+    func destinationEscapeHandlerHasPriority() {
+        var path: [Route] = [.detail]
+        var handledByDestination = false
+        let binding = Binding<[Route]>(get: { path }, set: { path = $0 })
+        let harness = NavigationHarness()
+        let stack = NavigationStack(path: binding) {
+            Text("Root")
+                .navigationDestination(for: Route.self) { _ in
+                    Text("Detail").onKeyPress { event in
+                        guard event.key == .escape else { return false }
+                        handledByDestination = true
+                        return true
+                    }
+                }
+        }
+
+        _ = harness.render(stack)
+        harness.send(.escape)
+        #expect(handledByDestination)
+        #expect(path == [.detail])
     }
 
     @Test("destination button receives enter")
@@ -375,6 +421,52 @@ struct NavigationLinkTests {
         #expect(context.environment.focusManager.currentFocusedID != nil)
         #expect(context.environment.focusManager.dispatchKeyEvent(KeyEvent(key: .enter)))
         #expect(path == [.detail])
+    }
+
+    @Test("direct destination link works with a typed collection path")
+    func directDestinationLinkWithCollectionPath() {
+        var path: [Route] = []
+        let binding = Binding<[Route]>(get: { path }, set: { path = $0 })
+        let harness = NavigationHarness()
+        let stack = NavigationStack(path: binding) {
+            NavigationLink("Direct") { Text("Direct Destination") }
+        }
+
+        let rootBuffer = harness.render(stack)
+        #expect(rootBuffer.lines.joined().stripped.contains("Direct"))
+        harness.send(.enter)
+        let destinationBuffer = harness.render(stack)
+        #expect(destinationBuffer.lines.joined().contains("Direct Destination"))
+        #expect(path.isEmpty)
+
+        harness.send(.escape)
+        #expect(harness.render(stack).lines.joined().stripped.contains("Direct"))
+    }
+
+    @Test("typed destinations can be pushed and popped above explicit collection destinations")
+    func mixedTypedAndExplicitCollectionNavigation() {
+        var path: [Route] = []
+        let binding = Binding<[Route]>(get: { path }, set: { path = $0 })
+        let harness = NavigationHarness()
+        let stack = NavigationStack(path: binding) {
+            NavigationLink("Explicit") {
+                NavigationLink("Typed route", value: Route.detail)
+            }
+            .navigationDestination(for: Route.self) { _ in Text("Typed Destination") }
+        }
+
+        _ = harness.render(stack)
+        harness.send(.enter)
+        #expect(harness.render(stack).lines.joined().stripped.contains("Typed route"))
+        harness.send(.enter)
+        #expect(harness.render(stack).lines.joined().contains("Typed Destination"))
+        #expect(path == [.detail])
+
+        harness.send(.escape)
+        #expect(harness.render(stack).lines.joined().stripped.contains("Typed route"))
+        harness.send(.escape)
+        #expect(harness.render(stack).lines.joined().stripped.contains("Explicit"))
+        #expect(path.isEmpty)
     }
 
     @Test("nil value link is disabled and not focusable")

@@ -16,9 +16,9 @@ import PackageDescription
 
 let package = Package(
     name: "MyTUIApp",
-    platforms: [.macOS(.v10_15)],
+    platforms: [.macOS(.v14)],
     dependencies: [
-        .package(url: "https://github.com/phranck/TUIkit.git", from: "0.1.0"),
+        .package(url: "https://github.com/murilxaraujo/TUIkit.git", exact: "0.7.0"),
     ],
     targets: [
         .executableTarget(

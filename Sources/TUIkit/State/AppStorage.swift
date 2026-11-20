@@ -459,8 +459,8 @@ extension AppStorage {
         wrappedValue: Value,
         key: String,
         store: (any StorageBackend)?,
-        rawValue: @escaping @Sendable (Value) -> Raw,
-        fromRaw: @escaping @Sendable (Raw) -> Value?
+        rawValue: @escaping (Value) -> Raw,
+        fromRaw: @escaping (Raw) -> Value?
     ) -> AppStorage<Value> {
         AppStorage(box: AppStorageBox(
             key: key,
@@ -618,10 +618,16 @@ extension AppStorage: DynamicProperty {}
 /// Reference storage that binds AppStorage to its first rendering runtime.
 private final class AppStorageBox<Value>: @unchecked Sendable {
     /// Reads the stored value from a backend, if present.
-    typealias Read = @Sendable (any StorageBackend, String) -> Value?
+    ///
+    /// These private synchronous callbacks are not `@Sendable`: they capture
+    /// only immutable type-level conversion metadata and do not retain or
+    /// mutate caller-owned state. The backend owns synchronization for storage
+    /// access; this box's unchecked conformance covers its locked dependency
+    /// binding and immutable callbacks.
+    typealias Read = (any StorageBackend, String) -> Value?
 
     /// Writes (or clears) the stored value on a backend.
-    typealias Write = @Sendable (any StorageBackend, String, Value) -> Void
+    typealias Write = (any StorageBackend, String, Value) -> Void
 
     /// Persistent key.
     private let key: String

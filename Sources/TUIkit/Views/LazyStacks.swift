@@ -10,8 +10,7 @@
 /// creating items only as needed.
 ///
 /// Unlike ``VStack``, which renders all views immediately, `LazyVStack`
-/// only renders views when they become visible. In a terminal context,
-/// this means views outside the available height are not rendered.
+/// measures its children and renders only those inside the visible height.
 ///
 /// Use `LazyVStack` when you have a large number of items or want to
 /// defer rendering of offscreen content.
@@ -28,9 +27,9 @@
 /// }
 /// ```
 ///
-/// - Note: In TUIKit's terminal context, lazy rendering is based on
-///   `availableHeight` in the render context. Items beyond this height
-///   are not rendered until they scroll into view.
+/// - Note: When used in ``ScrollView``, all children are measured to determine
+///   the total content height, but only visible children are rendered. Child
+///   creation and measurement can still visit every collection element.
 public struct LazyVStack<Content: View>: View {
     /// The horizontal alignment of the children.
     public let alignment: HorizontalAlignment
@@ -65,7 +64,7 @@ public struct LazyVStack<Content: View>: View {
 // MARK: - Internal LazyVStack Core
 
 /// Internal view that handles the actual rendering of LazyVStack.
-private struct _LazyVStackCore<Content: View>: View, Renderable {
+private struct _LazyVStackCore<Content: View>: View, Renderable, Layoutable {
     let alignment: HorizontalAlignment
     let spacing: Int
     let content: Content
@@ -74,56 +73,81 @@ private struct _LazyVStackCore<Content: View>: View, Renderable {
         fatalError("_LazyVStackCore renders via Renderable")
     }
 
+    func sizeThatFits(proposal: ProposedSize, context: RenderContext) -> ViewSize {
+        let (_, sizes) = measureChildren(context: context, width: proposal.width ?? context.availableWidth)
+        let totalHeight = sizes.reduce(0) { $0 + $1.height } + max(0, sizes.count - 1) * spacing
+        let maxWidth = sizes.map(\.width).max() ?? 0
+        return ViewSize(
+            width: proposal.width ?? maxWidth,
+            height: totalHeight,
+            isWidthFlexible: true,
+            isHeightFlexible: sizes.contains(where: \.isHeightFlexible)
+        )
+    }
+
     func renderToBuffer(context: RenderContext) -> FrameBuffer {
-        let infos = resolveChildInfos(from: content, context: context)
-
-        // Lazy rendering: only render items that fit within availableHeight
-        let availableHeight = context.availableHeight
-
-        // Spacer distribution (same as VStack)
-        let spacerCount = infos.filter(\.isSpacer).count
-        let fixedHeight = infos.compactMap(\.buffer).reduce(0) { $0 + $1.height }
-        let totalSpacing = max(0, infos.count - 1) * spacing
-
-        let availableForSpacers = max(0, availableHeight - fixedHeight - totalSpacing)
+        let viewport = context.environment.scrollViewport
+        let (children, sizes) = measureChildren(context: context, width: context.availableWidth)
+        let spacerCount = children.filter(\.isSpacer).count
+        let fixedHeight = zip(children, sizes).reduce(0) { total, pair in
+            total + (pair.0.isSpacer ? 0 : pair.1.height)
+        }
+        let totalSpacing = max(0, children.count - 1) * spacing
+        let availableForSpacers = max(0, context.availableHeight - fixedHeight - totalSpacing)
         let spacerHeight = spacerCount > 0 ? availableForSpacers / spacerCount : 0
         let spacerRemainder = spacerCount > 0 ? availableForSpacers % spacerCount : 0
-
-        let childMaxWidth = infos.compactMap(\.buffer).map(\.width).max() ?? 0
+        let childMaxWidth = sizes.map(\.width).max() ?? 0
         let maxWidth = spacerCount > 0 ? context.availableWidth : childMaxWidth
 
-        var result = FrameBuffer()
-        var currentHeight = 0
+        var childHeights: [Int] = []
         var spacerIndex = 0
-
-        for (index, info) in infos.enumerated() {
-            let spacingToApply = index > 0 ? spacing : 0
-
-            if info.isSpacer {
+        for (child, size) in zip(children, sizes) {
+            if child.isSpacer {
                 let extraHeight = spacerIndex < spacerRemainder ? 1 : 0
-                let height = max(info.spacerMinLength ?? 0, spacerHeight + extraHeight)
-
-                // Lazy: check if spacer fits
-                if currentHeight + spacingToApply + height > availableHeight {
-                    break
-                }
-
-                result.appendVertically(FrameBuffer(emptyWithHeight: height), spacing: spacingToApply)
-                currentHeight += spacingToApply + height
+                childHeights.append(max(child.spacerMinLength ?? 0, spacerHeight + extraHeight))
                 spacerIndex += 1
-            } else if let buffer = info.buffer {
-                // Lazy: check if item fits
-                if currentHeight + spacingToApply + buffer.height > availableHeight {
-                    break
-                }
-
-                let alignedBuffer = alignBuffer(buffer, toWidth: maxWidth, alignment: alignment)
-                result.appendVertically(alignedBuffer, spacing: spacingToApply)
-                currentHeight += spacingToApply + buffer.height
+            } else {
+                childHeights.append(size.height)
             }
         }
 
-        return result
+        let totalHeight = childHeights.reduce(0, +) + totalSpacing
+        let outputHeight = viewport == nil ? min(totalHeight, context.availableHeight) : totalHeight
+        var lines = Array(repeating: "", count: outputHeight)
+        let visibleTop = viewport?.offset ?? 0
+        let visibleBottom = visibleTop + (viewport?.height ?? context.availableHeight)
+        var contentLineOffset = 0
+
+        for index in children.indices {
+            let childHeight = childHeights[index]
+            if childHeight > 0 && contentLineOffset < visibleBottom && contentLineOffset + childHeight > visibleTop {
+                let childBuffer: FrameBuffer
+                if children[index].isSpacer {
+                    childBuffer = FrameBuffer(emptyWithHeight: childHeight)
+                } else {
+                    childBuffer = children[index].render(
+                        width: maxWidth,
+                        height: childHeight,
+                        context: context
+                    )
+                }
+                let aligned = alignBuffer(childBuffer, toWidth: maxWidth, alignment: alignment)
+                for lineIndex in 0..<min(childHeight, aligned.height) where contentLineOffset + lineIndex < outputHeight {
+                    lines[contentLineOffset + lineIndex] = aligned.lines[lineIndex]
+                }
+            }
+            contentLineOffset += childHeight + (index + 1 < children.count ? spacing : 0)
+        }
+
+        return FrameBuffer(lines: lines)
+    }
+
+    private func measureChildren(context: RenderContext, width: Int) -> ([ChildView], [ViewSize]) {
+        let children = resolveChildViews(from: content, context: context)
+        let measureContext = context.withPhase(.measure)
+        let proposal = ProposedSize(width: width, height: nil)
+        let sizes = children.map { $0.measure(proposal: proposal, context: measureContext) }
+        return (children, sizes)
     }
 
     /// Aligns a buffer horizontally within the given width.

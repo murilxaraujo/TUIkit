@@ -12,7 +12,7 @@ TUIkit's app runtime is designed around a SwiftUI-like responsiveness model: a n
 - cross-thread notifications should only set render-needed flags or update explicitly locked state;
 - view rendering should remain a pure function of view value, environment, state storage, and terminal dimensions.
 
-`TUIRuntimeActor` is now available as the framework's explicit runtime actor marker. The current portable terminal loop remains synchronous, so migration is incremental: runtime-owned objects can adopt that actor over time without forcing all `View` APIs to become async.
+The portable terminal loop remains synchronous. `TUIRuntime.runInBackground` provides a detached-work helper, but there is no separately actor-isolated runtime yet. Do not treat a public actor marker as a synchronization guarantee until runtime-owned state actually uses it.
 
 The audit does **not** mean every listed item is a bug. It distinguishes accepted invariants from items that should be fixed or revisited before beta/1.0.
 
@@ -171,7 +171,7 @@ Recommendation:
 
 TUIkit now has the first concrete pieces of its SwiftUI-like concurrency model:
 
-- Added `TUIRuntimeActor` as the explicit runtime/interaction-lane actor marker.
+- Removed the unused `TUIRuntimeActor` marker because no runtime-owned state used its isolation.
 - Added `TUIRuntime.runInBackground(priority:operation:)` for work that must not inherit the runtime/main actor.
 - Added per-context render performance monitoring exposed through `EnvironmentValues.renderPerformance` for lightweight diagnostics such as the example app's live FPS readout.
 - `LifecycleManager.startTask` now uses detached background tasks, so `.task` work does not freeze input handling or rendering by inheriting the interaction loop.
@@ -232,7 +232,7 @@ Required before beta-quality runtime claims:
 3. Add lifecycle stress tests for `.task()` cancellation during rapid appear/disappear and app shutdown.
 4. Add render invalidation stress tests for rapid timer ticks, focus changes, and state changes.
 5. Decide whether `NotificationService.current` remains public API or moves behind an environment/action context before 1.0.
-6. Gradually annotate runtime-owned managers with `TUIRuntimeActor` as APIs become async-safe.
+6. Define and apply a concrete isolation boundary for runtime-owned managers before exposing a public runtime actor.
 7. Evaluate whether `StateRegistration` can become explicit render-local state instead of static render globals.
 
 ## Current readiness interpretation

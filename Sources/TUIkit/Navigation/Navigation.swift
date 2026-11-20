@@ -132,10 +132,33 @@ private enum NavigationStackStorage<Data> {
     case unmanaged
     case navigationPath(Binding<NavigationPath>)
     case collection(
+        getPath: () -> [AnyHashable],
         getTop: () -> AnyHashable?,
         append: (AnyHashable) -> Void,
         removeLast: () -> Bool
     )
+}
+
+private struct ExplicitCollectionDestination {
+    let destination: ExplicitNavigationDestination
+    let routeDepth: Int
+}
+
+private final class NavigationCollectionState: @unchecked Sendable {
+    var explicitDestinations: [ExplicitCollectionDestination] = []
+    var lastPath: [AnyHashable]
+
+    init(lastPath: [AnyHashable]) {
+        self.lastPath = lastPath
+    }
+}
+
+private struct NavigationStackBindings {
+    let topValue: AnyHashable?
+    let depth: Int
+    let appendValue: (AnyHashable) -> Void
+    let appendExplicit: (AnyView) -> Void
+    let pop: () -> Bool
 }
 
 /// A SwiftUI-inspired stack-based navigation container for terminal views.
@@ -162,7 +185,8 @@ public struct NavigationStack<Data, Root: View>: View, Renderable {
             Data.Element: Hashable {
         self.root = root()
         self.storage = .collection(
-            getTop: { path.wrappedValue.last.map(AnyHashable.init) },
+            getPath: { path.wrappedValue.map { AnyHashable($0) } },
+            getTop: { path.wrappedValue.last.map { AnyHashable($0) } },
             append: { value in
                 guard let typed = value.base as? Data.Element else { return }
                 path.wrappedValue.append(typed)
@@ -181,65 +205,43 @@ public struct NavigationStack<Data, Root: View>: View, Renderable {
 
     public func renderToBuffer(context: RenderContext) -> FrameBuffer {
         let registry = NavigationDestinationRegistry()
-        var collectionEnvironment = context.environment
-        collectionEnvironment.navigationDestinationRegistry = registry
-        let collectionContext = context
-            .withEnvironment(collectionEnvironment)
-            .withPhase(.measure)
-            .withBranchIdentity("navigation-semantic-root")
-        _ = TUIkit.renderToBuffer(root, context: collectionContext)
-
         var liveEnvironment = context.environment
         liveEnvironment.navigationDestinationRegistry = registry
 
-        let topValue: AnyHashable?
-        let appendValue: (AnyHashable) -> Void
-        let appendExplicit: (AnyView) -> Void
-        let popValue: () -> Bool
+        let bindings = makeNavigationBindings(context: context)
 
-        switch storage {
-        case .unmanaged:
-            let stateStorage = context.environment.stateStorage!
-            let key = StateStorage.StateKey(identity: context.identity, propertyIndex: 0)
-            let box: StateBox<NavigationPath> = stateStorage.storage(for: key, default: NavigationPath())
-            topValue = box.value.lastElement
-            appendValue = { box.value.append($0) }
-            appendExplicit = { box.value.append(ExplicitNavigationDestination(view: $0)) }
-            popValue = {
-                guard !box.value.isEmpty else { return false }
-                box.value.removeLast()
-                return true
-            }
-        case .navigationPath(let path):
-            topValue = path.wrappedValue.lastElement
-            appendValue = { path.wrappedValue.append($0) }
-            appendExplicit = { path.wrappedValue.append(ExplicitNavigationDestination(view: $0)) }
-            popValue = {
-                guard !path.wrappedValue.isEmpty else { return false }
-                path.wrappedValue.removeLast()
-                return true
-            }
-        case .collection(let getTop, let append, let removeLast):
-            topValue = getTop()
-            appendValue = append
-            appendExplicit = { _ in }
-            popValue = removeLast
-        }
-
-        let coordinatorPop: @MainActor @Sendable () -> Bool = { popValue() }
+        let coordinatorPop: @MainActor @Sendable () -> Bool = { bindings.pop() }
         liveEnvironment.navigationCoordinator = NavigationCoordinator(
-            pushValue: { value in appendValue(value) },
-            pushExplicit: { view in appendExplicit(view) },
+            pushValue: { value in bindings.appendValue(value) },
+            pushExplicit: { view in bindings.appendExplicit(view) },
             pop: coordinatorPop
         )
         let liveContext = context.withEnvironment(liveEnvironment)
 
         if context.allowsRenderSideEffects {
-            context.environment.statusBar.reportNavigationDepth(topValue == nil ? 0 : 1)
+            context.environment.statusBar.reportNavigationDepth(bindings.depth)
+            context.environment.keyEventDispatcher!.addHandler { event in
+                guard event.key == .escape else { return false }
+                return bindings.pop()
+            }
+        }
+
+        // An empty stack renders its root live once. A semantic prepass is
+        // needed only when rendering a destination, so that destinations
+        // declared in the root can be resolved without also rendering the
+        // root's interactive side effects twice.
+        if bindings.topValue != nil {
+            var collectionEnvironment = context.environment
+            collectionEnvironment.navigationDestinationRegistry = registry
+            let collectionContext = context
+                .withEnvironment(collectionEnvironment)
+                .withPhase(.measure)
+                .withBranchIdentity("navigation-semantic-root")
+            _ = TUIkit.renderToBuffer(root, context: collectionContext)
         }
 
         let content: FrameBuffer
-        if let topValue {
+        if let topValue = bindings.topValue {
             let destinationIdentity = "navigation-destination-\(String(describing: type(of: topValue.base)))-\(String(describing: topValue.base))"
             let destinationContext = liveContext.withBranchIdentity(destinationIdentity)
             let destinationView = registry.resolve(topValue) ?? AnyView(missingDestinationView(for: topValue))
@@ -254,12 +256,99 @@ public struct NavigationStack<Data, Root: View>: View, Renderable {
             )
         }
 
-        guard context.allowsRenderSideEffects else { return content }
-        context.environment.keyEventDispatcher!.addHandler { event in
-            guard event.key == .escape else { return false }
-            return popValue()
-        }
         return content
+    }
+
+    private func makeNavigationBindings(context: RenderContext) -> NavigationStackBindings {
+        switch storage {
+        case .unmanaged:
+            let stateStorage = context.environment.stateStorage!
+            stateStorage.markActive(context.identity)
+            let key = StateStorage.StateKey(identity: context.identity, propertyIndex: 0)
+            let box: StateBox<NavigationPath> = stateStorage.storage(for: key, default: NavigationPath())
+            return NavigationStackBindings(
+                topValue: box.value.lastElement,
+                depth: box.value.count,
+                appendValue: { box.value.append($0) },
+                appendExplicit: { box.value.append(ExplicitNavigationDestination(view: $0)) },
+                pop: {
+                    guard !box.value.isEmpty else { return false }
+                    box.value.removeLast()
+                    return true
+                }
+            )
+        case .navigationPath(let path):
+            return NavigationStackBindings(
+                topValue: path.wrappedValue.lastElement,
+                depth: path.wrappedValue.count,
+                appendValue: { path.wrappedValue.append($0) },
+                appendExplicit: { path.wrappedValue.append(ExplicitNavigationDestination(view: $0)) },
+                pop: {
+                    guard !path.wrappedValue.isEmpty else { return false }
+                    path.wrappedValue.removeLast()
+                    return true
+                }
+            )
+        case .collection(let getPath, let getTop, let append, let removeLast):
+            return collectionNavigationBindings(
+                context: context,
+                getPath: getPath,
+                getTop: getTop,
+                append: append,
+                removeLast: removeLast
+            )
+        }
+    }
+
+    private func collectionNavigationBindings(
+        context: RenderContext,
+        getPath: @escaping () -> [AnyHashable],
+        getTop: @escaping () -> AnyHashable?,
+        append: @escaping (AnyHashable) -> Void,
+        removeLast: @escaping () -> Bool
+    ) -> NavigationStackBindings {
+        let pathValues = getPath()
+        let stateStorage = context.environment.stateStorage!
+        stateStorage.markActive(context.identity)
+        let key = StateStorage.StateKey(identity: context.identity, propertyIndex: 1)
+        let stateBox: StateBox<NavigationCollectionState> = stateStorage.storage(
+            for: key,
+            default: NavigationCollectionState(lastPath: pathValues)
+        )
+        let state = stateBox.value
+        if state.lastPath != pathValues {
+            let commonPrefixCount = zip(state.lastPath, pathValues)
+                .prefix { $0.0 == $0.1 }
+                .count
+            state.explicitDestinations.removeAll { $0.routeDepth > commonPrefixCount }
+            state.lastPath = pathValues
+        }
+
+        let visibleExplicit = state.explicitDestinations.last { $0.routeDepth == pathValues.count }
+        return NavigationStackBindings(
+            topValue: visibleExplicit.map { AnyHashable($0.destination) } ?? getTop(),
+            depth: pathValues.count + state.explicitDestinations.count,
+            appendValue: append,
+            appendExplicit: { view in
+                state.explicitDestinations.append(ExplicitCollectionDestination(
+                    destination: ExplicitNavigationDestination(view: view),
+                    routeDepth: getPath().count
+                ))
+            },
+            pop: {
+                let currentPathCount = getPath().count
+                if let last = state.explicitDestinations.last, last.routeDepth == currentPathCount {
+                    state.explicitDestinations.removeLast()
+                    return true
+                }
+                let removed = removeLast()
+                if removed {
+                    state.lastPath = getPath()
+                    state.explicitDestinations.removeAll { $0.routeDepth > state.lastPath.count }
+                }
+                return removed
+            }
+        )
     }
 
     private func missingDestinationView(for value: AnyHashable) -> some View {
@@ -291,13 +380,13 @@ public struct NavigationLink<Label: View, Destination: View>: View {
 
     public init<P: Hashable>(value: P?, @ViewBuilder label: () -> Label) where Destination == EmptyView {
         self.label = label()
-        self.value = value.map(AnyHashable.init)
+        self.value = value.map { AnyHashable($0) }
         self.destination = nil
     }
 
     public init<P: Hashable>(_ title: String, value: P?) where Label == Text, Destination == EmptyView {
         self.label = Text(title)
-        self.value = value.map(AnyHashable.init)
+        self.value = value.map { AnyHashable($0) }
         self.destination = nil
     }
 

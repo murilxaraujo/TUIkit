@@ -25,7 +25,7 @@ TUIkit is currently pre-1.0. Breaking changes may occur before a stable release,
 
 - Linked production-readiness and API-stability documentation from the README and contribution guidance.
 - Made `BadgeModifier`, `OverlayModifier`, `ModalPresentationModifier`, `ListRowSeparatorModifier`, `KeyPressModifier`, `AlertPresentationModifier`, `DimmedModifier`, `SelectionDisabledModifier`, `FlexibleFrameView`, and `extractBadgeValue(from:)` internal implementation details; app-facing modifier methods remain public.
-- Introduced `TUIRuntimeActor` and `TUIRuntime.runInBackground(priority:operation:)` as the foundation for a SwiftUI-like concurrency model: UI interaction/render coordination stays on the runtime lane while expensive work runs in background tasks.
+- Added `TUIRuntime.runInBackground(priority:operation:)` for work that must not inherit the caller's actor.
 - Moved lifecycle `.task` execution to detached background tasks so view tasks do not inherit and freeze the interaction loop.
 - Replaced `PulseTimer` and `CursorTimer` `DispatchSourceTimer` usage with structured Swift concurrency tasks and locked shared timer state.
 - Added locking to `StateStorage`, `StateBox`, and `RenderCache` so background task results can safely publish through state and invalidate render cache entries.
@@ -44,10 +44,13 @@ TUIkit is currently pre-1.0. Breaking changes may occur before a stable release,
 
 ### Removed
 
-- Nothing yet.
+- Removed the unused public `TUIRuntimeActor` and `PresentationCoordinator` placeholders. TUIkit does not yet provide a separately actor-isolated runtime or unified presentation coordinator.
 
 ### Fixed
 
+- Navigation now renders a visible root only once per frame, supports explicit destination links with typed collection paths, reports full stack depth, and lets nested presentation handlers receive Escape first.
+- Scroll views measure intrinsic content instead of rendering against a fixed 10,000-line proposal; focused controls retain Up/Down for focus navigation.
+- Updated installation URLs, template dependency version, framework version resource, and test guidance to match the maintained fork.
 - Fixed raw-mode Ctrl+C handling so it exits through the normal app cleanup path before focused controls or custom handlers can consume it.
 - Stopped the cursor animation timer explicitly during app shutdown cleanup.
 

@@ -1,11 +1,11 @@
 <p align="center">
     <img alt="Platforms" src="https://img.shields.io/badge/Platforms-macOS%20%7C%20Linux-005c00">
-    <a href="https://github.com/phranck/TUIkit/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/phranck/TUIkit?label=Release&color=009900"></a>
+    <a href="https://github.com/murilxaraujo/TUIkit/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/murilxaraujo/TUIkit?label=Release&color=009900"></a>
     <img alt="Swift 6.0" src="https://img.shields.io/badge/Swift-6.0-00b300?logo=swift&logoColor=white">
     <img alt="i18n" src="https://img.shields.io/badge/i18n-5%20Languages-00d900">
     <img alt="License" src="https://img.shields.io/badge/License-MIT-00b300?style=flat">
-    <a href="https://github.com/phranck/TUIkit/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/phranck/TUIkit/ci.yml?branch=main&label=CI&color=009900"></a>
-    <img alt="Tests" src="https://img.shields.io/badge/Tests-1372_passing-005c00">
+    <a href="https://github.com/murilxaraujo/TUIkit/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/murilxaraujo/TUIkit/ci.yml?branch=main&label=CI&color=009900"></a>
+    <img alt="Tests" src="https://img.shields.io/badge/Tests-Swift%20Testing-005c00">
 </p>
 
 <img width="1200" height="630" alt="og-image@1x" src="https://github.com/user-attachments/assets/8bf99da8-e87c-4447-b3cb-a6f3f52c6d18" />
@@ -134,7 +134,7 @@ This runs `swift run TUIkitExample`. Press `q`, `ESC`, or `Ctrl+C` to exit. Duri
 Install the `tuikit` command and create a new project:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/phranck/TUIkit/main/project-template/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/murilxaraujo/TUIkit/main/project-template/install.sh | bash
 tuikit init MyApp
 cd MyApp && swift run
 ```
@@ -147,7 +147,7 @@ Add TUIkit to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/phranck/TUIkit.git", exact: "0.6.0")
+    .package(url: "https://github.com/murilxaraujo/TUIkit.git", exact: "0.7.0")
 ]
 ```
 
@@ -213,7 +213,7 @@ struct MyView: View {
 
 **Supported languages**: English, Deutsch, Français, Italiano, Español
 
-For complete documentation, see [Localization Guide](https://github.com/phranck/TUIkit/blob/main/Sources/TUIkit/TUIkit.docc/Articles/Localization.md) in the DocC documentation.
+For complete documentation, see [Localization Guide](https://github.com/murilxaraujo/TUIkit/blob/main/Sources/TUIkit/TUIkit.docc/Articles/Localization.md) in the DocC documentation.
 
 ## Architecture
 
@@ -251,7 +251,7 @@ Tests/
 └── TUIkitTests/          Public API and runtime integration
 ```
 
-Test discovery covers 1372 tests across all isolated targets.
+Run `swift test` to execute the Swift Testing suites across all isolated targets.
 
 ## Requirements
 
@@ -266,7 +266,7 @@ sources are vendored as namespaced Swift targets; the package graph contains no 
 - Tests use Swift Testing (`@Test`, `#expect`): run with `swift test`
 - Run the complete local macOS/Linux quality gate with `./scripts/test-linux.sh`
 - Generate the deployable DocC archive with `./scripts/generate-documentation.sh`
-- All 1372 tests run through Swift Testing; suites that isolate shared state run serially
+- Tests use Swift Testing; suites that isolate shared state run serially
 - The `Terminal` class handles raw mode and cursor control via POSIX `termios`
 - See [Known Limitations](docs/KnownLimitations.md) and [Terminal Compatibility](docs/TerminalCompatibility.md) when validating real terminal behavior.
 
